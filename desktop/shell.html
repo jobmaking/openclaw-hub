@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; object-src 'none'; form-action 'none'">
+  <title>Hub</title>
+  <link rel="stylesheet" href="shell.css">
+  <script src="shell.js" defer></script>
+</head>
+<body>
+  <svg class="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-mark" viewBox="0 0 32 32"><path d="M9 8v16M23 8v16M9 16h14"/><circle cx="9" cy="8" r="2"/><circle cx="9" cy="24" r="2"/><circle cx="23" cy="8" r="2"/><circle cx="23" cy="24" r="2"/><circle cx="16" cy="16" r="3"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 15v5h16v-5"/></symbol>
+    <symbol id="i-attach" viewBox="0 0 24 24"><path d="m8 12 6-6a3 3 0 0 1 4.25 4.25l-8 8a5 5 0 0 1-7.07-7.07l8-8M7 14l7-7"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5h6l2 2h10v13H3V7Z"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-minimize" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+    <symbol id="i-maximize" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></symbol>
+    <symbol id="i-restore" viewBox="0 0 24 24"><path d="M9 6V4h11v11h-2M4 9h11v11H4Z"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 14 6-6 6 6"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 10 6 6 6-6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8l-5-5ZM14 3v6h5M8 13h8M8 17h6"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 8a8 8 0 1 0 0 8M20 3v6h-6"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></symbol>
+  </svg>
+
+  <header class="titlebar">
+    <div class="identity">
+      <button class="app-mark" data-command="reload" aria-label="Volver al HUB" title="Volver al HUB · Ctrl+R"><svg><use href="#i-mark"/></svg></button>
+      <span class="app-name">Hub</span>
+      <span class="identity-divider"></span>
+      <span class="app-tagline">Tu espacio de trabajo</span>
+    </div>
+    <div class="title-actions">
+      <span class="server" id="server" title="Servidor del Hub"><svg><use href="#i-lock"/></svg><span id="server-name">Hub</span></span>
+      <button class="attach-button" data-command="attach" title="Adjuntar archivos · Ctrl+O"><svg><use href="#i-attach"/></svg><span>Adjuntar</span></button>
+      <button class="icon-button download-toggle" id="download-toggle" data-command="downloads" aria-label="Abrir descargas" title="Descargas · Ctrl+J" aria-expanded="false"><svg><use href="#i-download"/></svg><span id="download-count" class="count" hidden></span></button>
+      <button class="icon-button" id="notification-toggle" data-command="notifications" aria-label="Notificaciones del escritorio" title="Notificaciones del escritorio" aria-pressed="true"><svg><use href="#i-bell"/></svg></button>
+      <button class="icon-button" data-command="menu" aria-label="Menú de Hub" title="Menú"><svg><use href="#i-menu"/></svg></button>
+    </div>
+    <div class="window-controls">
+      <button data-command="minimize" aria-label="Minimizar" title="Minimizar"><svg><use href="#i-minimize"/></svg></button>
+      <button data-command="maximize" id="maximize" aria-label="Maximizar" title="Maximizar"><svg><use href="#i-maximize"/></svg></button>
+      <button data-command="close" class="window-close" aria-label="Cerrar Hub" title="Cerrar Hub"><svg><use href="#i-close"/></svg></button>
+    </div>
+  </header>
+
+  <div class="findbar" id="findbar" hidden>
+    <label><svg><use href="#i-search"/></svg><input id="find-input" type="search" placeholder="Buscar en la conversación…" aria-label="Buscar en la conversación" autocomplete="off"></label>
+    <span id="find-result" role="status" aria-live="polite"></span>
+    <button class="icon-button" id="find-prev" aria-label="Coincidencia anterior" title="Anterior · Mayús+Enter"><svg><use href="#i-up"/></svg></button>
+    <button class="icon-button" id="find-next" aria-label="Siguiente coincidencia" title="Siguiente · Enter"><svg><use href="#i-down"/></svg></button>
+    <button class="icon-button" data-command="find-close" aria-label="Cerrar búsqueda" title="Cerrar · Esc"><svg><use href="#i-close"/></svg></button>
+  </div>
+
+  <main class="workspace">
+    <section class="landing" aria-live="polite">
+      <div class="landing-content">
+        <div class="landing-mark"><svg><use href="#i-mark"/></svg></div>
+        <div class="eyebrow">HUB PARA LINUX</div>
+        <h1 id="landing-title">Tu equipo, siempre a mano.</h1>
+        <p id="landing-description">Estamos abriendo tu espacio de trabajo.</p>
+        <div id="loading-indicator" class="loading-line" role="status" aria-label="Cargando Hub"><i></i></div>
+        <button id="retry" class="primary-button" data-command="reload" hidden><svg><use href="#i-refresh"/></svg>Volver a intentar</button>
+        <div class="landing-features"><span><svg><use href="#i-attach"/></svg>Adjunta y arrastra</span><span><svg><use href="#i-download"/></svg>Descarga al escritorio</span></div>
+      </div>
+    </section>
+
+    <aside class="downloads" id="downloads" aria-label="Descargas" hidden>
+      <div class="drawer-heading"><div><span class="eyebrow">EN TU EQUIPO</span><h2>Descargas <span id="drawer-count"></span></h2></div><button class="icon-button" data-command="downloads-close" aria-label="Cerrar descargas" title="Cerrar descargas"><svg><use href="#i-close"/></svg></button></div>
+      <button class="directory" data-command="folder" title="Abrir la carpeta de descargas"><span class="directory-icon"><svg><use href="#i-folder"/></svg></span><span><strong>Carpeta de descargas</strong><span id="directory-path"></span></span><span class="directory-arrow">↗</span></button>
+      <div class="downloads-scroll">
+        <div id="downloads-empty" class="empty-state"><span class="empty-icon"><svg><use href="#i-download"/></svg></span><h3>Todo lo que recibas, aquí.</h3><p>Descarga un archivo desde el chat.<br>Lo guardaremos en tu equipo.</p><span class="empty-shortcut"><kbd>Ctrl</kbd> + <kbd>J</kbd> para volver aquí</span></div>
+        <div id="download-list" class="download-list" role="list" aria-label="Archivos descargados"></div>
+      </div>
+      <div class="drawer-footer"><span id="save-mode">Guardado automático</span><button data-command="clear-downloads" id="clear-history" title="No borra los archivos de tu equipo">Limpiar lista</button></div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span class="desktop-label"><span class="desktop-dot"></span>Hub para Linux</span>
+    <span id="status-message" role="status" aria-live="polite">Archivos, capturas e ideas. Todo en la conversación.</span>
+    <div class="footer-controls"><button data-command="zoom-out" aria-label="Reducir tamaño del texto" title="Reducir texto · Ctrl+−">−</button><button data-command="zoom-reset" id="zoom-value" title="Restablecer texto · Ctrl+0">100 %</button><button data-command="zoom-in" aria-label="Aumentar tamaño del texto" title="Aumentar texto · Ctrl++">+</button><span id="app-version">1.0.2</span></div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#121419">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hub">
+<title>Hub · Agentes</title>
+<link rel="stylesheet" href="style.css?v=40">
+<link rel="stylesheet" href="activity.css?v=1">
+<link rel="stylesheet" href="interface.css?v=3">
+<link rel="stylesheet" href="queue.css?v=1">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/hub-v2/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="/icon.svg?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/hub-v2/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+</head>
+<body>
+
+<div id="login-view" class="login-wrap hidden">
+  <form id="login-form" class="login-card">
+    <div class="login-heading">
+      <div class="login-logo" aria-hidden="true">🧭</div>
+      <div class="login-eyebrow">Tu espacio de trabajo</div>
+      <h1>Hub</h1>
+      <p class="login-sub">Tu equipo de agentes. Un solo espacio.</p>
+    </div>
+    <label class="login-label" for="login-user">Usuario</label>
+    <input id="login-user" type="text" placeholder="Tu usuario" aria-label="Usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label class="login-label" for="login-pass">Contraseña</label>
+    <input id="login-pass" type="password" placeholder="Tu contraseña" aria-label="Contraseña" autocomplete="current-password" required>
+    <button type="submit">Entrar</button>
+    <div id="login-error" class="login-error" role="alert"></div>
+  </form>
+</div>
+
+<div id="app" class="app hidden">
+  <div id="scrim" class="scrim hidden"></div>
+
+  <aside id="sidebar">
+    <div class="sidebar-head">
+      <button id="btn-nav-back" class="btn-nav-back" aria-label="Volver al chat" title="Volver al chat">← <span>Chat</span></button>
+      <span class="brand">🧭 Hub</span>
+      <button id="btn-new" title="Nueva sesión" aria-label="Nueva sesión"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Nueva</span></button>
+    </div>
+
+    <!-- Selector de agente -->
+    <div id="agent-strip" class="agent-strip"></div>
+
+    <div class="sessions-wrap">
+      <div class="sessions-heading">Conversaciones</div>
+      <input id="s-filter" class="s-filter hidden" type="search" placeholder="Buscar sesión…" aria-label="Buscar entre las sesiones cargadas" autocomplete="off" autocorrect="off" spellcheck="false">
+      <div id="sessions-notice" class="sessions-notice hidden" role="alert"></div>
+      <div id="session-list" class="session-list"></div>
+    </div>
+
+    <div id="s-errors" class="s-errors hidden">
+      <span class="s-err-icon">⚠️</span>
+      <span class="s-err-text"></span>
+      <span class="s-err-count"></span>
+      <span class="s-err-close" hidden>✕</span>
+    </div>
+
+    <div class="sidebar-foot">
+      <span id="me-name"></span>
+      <span id="sb-version" class="sb-version hidden"></span>
+      <button id="btn-logout" title="Salir" aria-label="Cerrar sesión"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9M6.4 5.8a8 8 0 1 0 11.2 0"/></svg></button>
+    </div>
+  </aside>
+
+  <div id="sb-resizer" title="Arrastra para ajustar el ancho · doble clic para restablecer"></div>
+
+  <main id="main">
+    <header id="chat-header">
+      <button id="btn-menu" class="btn-menu" title="Menú" aria-label="Abrir menú"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+      <div class="head-titles">
+        <div class="chat-title" id="chat-title">Elige un agente</div>
+        <div class="chat-sub" id="chat-sub"></div>
+      </div>
+      <div class="header-right">
+        <button id="btn-pending-questions" class="pending-questions hidden" type="button" aria-label="Ver preguntas pendientes"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9a4 4 0 1 1 6 3.45c-1.4.8-2 1.05-2 2.55M12 18h.01"/><circle cx="12" cy="12" r="10"/></svg><span class="pending-questions-label"></span></button>
+        <div id="ctx-meter" class="ctx-meter hidden" title="Contexto usado">
+          <div class="ctx-bar"><div id="ctx-fill"></div></div>
+          <span id="ctx-text"></span>
+        </div>
+    <div id="gw-status" class="gw-status" role="img" aria-label="Conectando con el agente" title="Conexión con el agente"></div>
+      </div>
+    </header>
+
+    <div id="session-settings" class="session-settings">
+    <div id="model-controls" class="model-controls hidden" role="group" aria-label="Modelo y esfuerzo de esta sesión">
+      <label class="model-field">API
+        <select id="provider-select" class="model-select" aria-label="API de IA"></select>
+      </label>
+      <label class="model-field">Modelo
+        <select id="model-select" class="model-select" aria-label="Modelo de IA para esta sesión"></select>
+      </label>
+      <label class="model-field">Esfuerzo
+        <select id="effort-select" class="model-select" aria-label="Esfuerzo de razonamiento para esta sesión"></select>
+      </label>
+      <button id="model-reset" class="model-reset" type="button" title="Restablecer el modelo por defecto del agente">↺ Modelo auto</button>
+      <div id="model-settings-status" class="model-settings-status hidden" role="status" aria-live="polite"></div>
+    </div>
+    </div>
+
+    <div id="drop-overlay" class="drop-overlay hidden"><div>📎 Suelta los archivos aquí</div></div>
+    <div id="messages" class="messages" role="region" aria-label="Historial del chat" tabindex="0"></div>
+    <button id="btn-latest" class="btn-latest hidden" type="button" aria-label="Ir al último mensaje">↓ Ir al último</button>
+
+    <div id="session-panels" class="session-panels">
+    <!-- Agent activity, questions and queue share a scrollport without displacing the editor. -->
+    <div id="prompts" class="prompts" role="region" aria-label="Preguntas y permisos pendientes"></div>
+    <div id="question-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <div id="run-status" class="run-status hidden" role="status" aria-live="off">
+      <span class="rs-dots"><i></i><i></i><i></i></span>
+      <span class="rs-text"></span>
+    </div>
+
+    <!-- Mensajes admitidos que esperan turno: el agente trabaja en el primero -->
+    <div id="queue-badge" class="queue-badge" style="display:none"></div>
+    </div>
+
+    <div id="composer" class="composer hidden">
+      <div id="composer-extras" class="composer-extras">
+      <div id="composer-status" class="composer-status hidden" role="status" aria-live="polite"></div>
+      <div id="chips" class="chips"></div>
+      </div>
+      <div class="composer-row">
+        <button id="btn-attach" title="Adjuntar archivo" aria-label="Adjuntar archivo"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 6-6a3 3 0 0 1 4.25 4.25l-8 8a5 5 0 0 1-7.07-7.07l8-8M7 14l7-7"/></svg></button>
+        <input type="file" id="file-input" multiple hidden>
+        <textarea id="input" rows="1" placeholder="Escribe un mensaje…" aria-label="Mensaje" aria-describedby="composer-status"></textarea>
+        <button id="btn-stop" class="hidden" title="Parar respuesta y vaciar la cola" aria-label="Parar respuesta y vaciar la cola"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
+        <button id="btn-send" title="Enviar" aria-label="Enviar mensaje"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+      </div>
+      <div id="composer-hint" class="composer-hint" aria-hidden="true"></div>
+    </div>
+  </main>
+</div>
+
+<dialog id="question-inbox" class="question-inbox" aria-labelledby="question-inbox-title">
+  <div class="question-inbox-head">
+    <div><h2 id="question-inbox-title">Pendientes</h2><p>Elige qué quieres responder.</p></div>
+    <button id="question-inbox-close" type="button" aria-label="Cerrar pendientes"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div id="question-inbox-list" class="question-inbox-list" role="list" aria-label="Preguntas y permisos pendientes"></div>
+</dialog>
+
+<div id="lightbox" class="lightbox hidden"><img id="lightbox-img" alt=""></div>
+
+<div id="scrim-menu" class="scrim-menu hidden"></div>
+<div id="msg-menu" class="msg-menu hidden">
+  <button data-act="copy">📋 Copiar el mensaje</button>
+  <button data-act="select">✂️ Seleccionar un trozo</button>
+  <button data-act="cancel">✕ Cancelar</button>
+</div>
+<div id="sel-bar" class="sel-bar hidden">
+  <span class="sel-hint">Ajusta y copia</span>
+  <button data-act="copy-sel" class="primary">Copiar</button>
+  <button data-act="done">Hecho</button>
+</div>
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+<script src="activity.js?v=3"></script>
+<script src="questions.js?v=3"></script>
+<script src="queue.js?v=2"></script>
+<script src="app.js?v=70"></script>
+</body>
+</html>

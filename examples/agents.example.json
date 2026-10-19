@@ -1,0 +1,12 @@
+[
+  {
+    "id": "assistant",
+    "name": "Assistant",
+    "emoji": "🧭",
+    "role": "General assistant",
+    "url": "ws://127.0.0.1:18789/ws",
+    "token": "REPLACE_WITH_YOUR_GATEWAY_TOKEN",
+    "gatewayAgentId": "main",
+    "fileRoots": { "published": [] }
+  }
+]

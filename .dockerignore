@@ -1,0 +1,10 @@
+**
+!package.json
+!package-lock.json
+!server.js
+!manage-users.js
+!VERSION
+!lib/
+!lib/**
+!public/
+!public/**

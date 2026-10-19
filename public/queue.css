@@ -1,0 +1,29 @@
+.queue-badge { color: var(--muted); }
+.queue-badge details { min-width: 0; }
+.queue-badge summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; cursor: pointer; list-style: none; }
+.queue-badge summary::-webkit-details-marker { display: none; }
+.queue-badge summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.queue-badge summary > span:first-child { color: var(--text); font-weight: 600; }
+.queue-hint { flex: none; font-size: 11px; }
+.queue-hint::after { content: ' ▾'; }
+.queue-badge details[open] .queue-hint::after { content: ' ▴'; }
+.queue-body { padding: 4px 0 2px; }
+.queue-note { margin: 0 0 8px; font-size: 11px; line-height: 1.5; }
+.queue-list { max-height: min(26vh, 240px); overflow-y: auto; overscroll-behavior: contain; list-style: none; padding: 0; margin: 0; scrollbar-width: thin; }
+.queue-list li { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line, #303642); padding: 10px 0; min-width: 0; }
+.queue-content { flex: 1; min-width: 0; }
+.queue-item-state { display: block; font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+.queue-text { margin: 0; color: var(--text); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; user-select: text; }
+.queue-remove, .queue-retry { background: transparent; color: var(--text); border: 1px solid var(--line, #303642); border-radius: 7px; font: inherit; padding: 6px 10px; cursor: pointer; }
+.queue-remove { flex: none; min-height: 36px; }
+.queue-remove[hidden] { display: none; }
+.queue-remove:hover, .queue-retry:hover { border-color: var(--accent); }
+.queue-remove:disabled, .queue-retry:disabled { opacity: .45; cursor: default; }
+.queue-retry { margin-top: 8px; font-size: 11px; }
+.queue-uncertain summary > span:first-child { color: var(--muted); }
+@media (max-width: 700px) {
+  .queue-list { max-height: 23vh; }
+  .queue-badge summary { gap: 8px; }
+  .queue-hint { font-size: 10px; }
+  .queue-remove { min-height: 40px; }
+}

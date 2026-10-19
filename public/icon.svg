@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="hub-icon-title">
+  <title id="hub-icon-title">Hub — agentes conectados</title>
+  <defs>
+    <linearGradient id="tile" x1="64" y1="24" x2="456" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1b2c47"/>
+      <stop offset="1" stop-color="#090f1d"/>
+    </linearGradient>
+    <radialGradient id="ambient" cx="0" cy="0" r="1" gradientTransform="translate(96 68) rotate(48) scale(512 438)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#48dfdf" stop-opacity=".13"/>
+      <stop offset="1" stop-color="#48dfdf" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="connections" x1="146" y1="146" x2="366" y2="366" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5ee6db"/>
+      <stop offset=".48" stop-color="#59cdec"/>
+      <stop offset="1" stop-color="#748eff"/>
+    </linearGradient>
+  </defs>
+  <g id="hub-tile">
+    <rect width="512" height="512" rx="112" fill="url(#tile)"/>
+    <rect width="512" height="512" rx="112" fill="url(#ambient)"/>
+    <rect x="1.5" y="1.5" width="509" height="509" rx="110.5" fill="none" stroke="#acd7ff" stroke-opacity=".15" stroke-width="3"/>
+  </g>
+  <g id="hub-mark">
+    <path d="M146 146V366M366 146V366M146 256H366" fill="none" stroke="url(#connections)" stroke-width="40" stroke-linecap="round"/>
+    <circle cx="146" cy="146" r="34" fill="#6ce8dd"/>
+    <circle cx="146" cy="366" r="34" fill="#49d4e2"/>
+    <circle cx="366" cy="146" r="34" fill="#83c1ff"/>
+    <circle cx="366" cy="366" r="34" fill="#8396ff"/>
+    <circle cx="256" cy="256" r="48" fill="#f1fcff"/>
+    <circle id="hub-center-cutout" cx="256" cy="256" r="18" fill="#14233b"/>
+  </g>
+</svg>

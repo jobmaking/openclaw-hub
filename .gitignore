@@ -1,0 +1,14 @@
+/data/
+/private/
+**/node_modules/
+/desktop/test-output/
+/dist/
+.env
+.env.*
+!.env.example
+*.db
+*.log
+*.bak-*
+*.pem
+*.key
+.DS_Store

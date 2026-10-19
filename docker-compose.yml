@@ -1,0 +1,22 @@
+services:
+  hub:
+    build: .
+    restart: unless-stopped
+    # Linux only: permits access to a gateway bound to host loopback.
+    # No ports: publication: BIND determines the listening interface.
+    network_mode: host
+    environment:
+      PORT: "${PORT:-18900}"
+      BIND: "${BIND:-127.0.0.1}"
+      BEHIND_PROXY: "${BEHIND_PROXY:-0}"
+      VAPID_SUBJECT: "${VAPID_SUBJECT:-https://example.com/openclaw-hub}"
+      TZ: "${TZ:-UTC}"
+      SESSION_VISIBLE_DAYS: "0"
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-25}"
+    volumes:
+      - ./data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

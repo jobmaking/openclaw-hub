@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Hub desktop launcher.
+#
+# Opens the Hub in a Chrome/Chromium "app" window: no tabs, no address bar,
+# its own profile and its own icon. This keeps the Hub's PWA features
+# (service worker, web push, notifications, uploads, WebSocket) working with
+# the browser engine the Hub is tested against, without shipping a second
+# Chromium runtime.
+set -euo pipefail
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/openclaw-hub-desktop"
+CONFIG_FILE="$CONFIG_DIR/config.env"
+PROFILE="${HUB_PROFILE:-$CONFIG_DIR/chrome}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/openclaw-hub-desktop"
+LOG_FILE="$STATE_DIR/chrome.log"
+
+# Optional per-user overrides:
+#   HUB_URL=https://hub.example.es/
+#   HUB_CHROME=/usr/bin/google-chrome-stable
+#   HUB_PROFILE=/path/to/chrome-profile
+if [ -r "$CONFIG_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$CONFIG_FILE"
+fi
+
+URL="${HUB_URL:-http://127.0.0.1:18900/}"
+
+find_chrome() {
+  local candidate
+  for candidate in "${HUB_CHROME:-}" google-chrome-stable google-chrome chromium chromium-browser; do
+    [ -n "$candidate" ] || continue
+    if command -v "$candidate" >/dev/null 2>&1; then
+      command -v "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! CHROME="$(find_chrome)"; then
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "Hub" "No encuentro Google Chrome ni Chromium instalado."
+  fi
+  printf 'Hub: no encuentro Google Chrome ni Chromium.\n' >&2
+  exit 1
+fi
+
+mkdir -p "$PROFILE" "$STATE_DIR"
+
+args=(
+  "--app=$URL"
+  "--user-data-dir=$PROFILE"
+  "--class=Hub"
+  "--no-first-run"
+  "--no-default-browser-check"
+  "--hide-crash-restore-bubble"
+  "--ozone-platform-hint=auto"
+)
+
+# Only on the first launch: later launches keep the window size the user chose.
+if [ ! -f "$PROFILE/Default/Preferences" ]; then
+  args+=("--window-size=1280,900")
+fi
+
+exec "$CHROME" "${args[@]}" "$@" >>"$LOG_FILE" 2>&1
