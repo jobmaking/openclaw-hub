@@ -14,6 +14,8 @@ License: MIT. Publication authorized by the project owner on 2026-10-19.
   checks and 23 desktop notification checks; 292 checks passed in isolation.
 - Docker Compose validation, image build and isolated installer verification passed.
 - GitHub Actions repeats web/unit checks and image build for this public tree.
+- First private CI run found an undeclared Playwright/browser dependency. It is
+  now pinned explicitly as a development dependency with Chromium setup in CI.
 
 ## Limits
 

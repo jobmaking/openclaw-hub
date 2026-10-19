@@ -17,5 +17,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "node tools/hub-backend-audit-check.mjs && node tools/hub-artifact-routes-check.mjs && node tools/hub-question-contract-check.mjs && node tools/hub-user-isolation-check.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.64.1"
   }
 }

@@ -63,8 +63,13 @@ Requires Node.js 22 or newer; Node 22 is the container baseline.
 
 ```bash
 npm ci
+npx playwright-core install --with-deps chromium
 npm test
 ```
+
+Playwright downloads a pinned Chromium for the account-boundary browser check.
+On Linux, `--with-deps` may need administrator access to install browser libraries;
+use `CHROMIUM_PATH` to select a compatible browser already installed.
 
 Tests exercise the real backend against simulated local gateways: authentication,
 user/session isolation, file boundaries, native question contracts and artifacts.
