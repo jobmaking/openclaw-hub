@@ -4,13 +4,14 @@ A self-hosted web interface for your OpenClaw agents. Bring several gateways int
 one place, with streaming chat, conversation history, files and per-user access.
 
 **Independent community project. Not an official OpenClaw product.**
-This is the first community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.0.31. The interface is
+This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.0.32. The interface is
 currently Spanish-first. A running OpenClaw gateway and its model configuration
 are required; this repository does not include models, API credits or a gateway.
 
 ## Features
 
 - Multiple agents/gateways, persistent conversations, history and search.
+- Collapsible session tree; derived sessions stay folded unless expanded.
 - Streaming responses, native progress, pending inputs and confirmed STOP.
 - Model and reasoning controls using capabilities advertised by your gateway.
 - Blocking and optional questions, tool approvals and reconnect recovery.

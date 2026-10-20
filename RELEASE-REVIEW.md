@@ -1,4 +1,4 @@
-# First community preview — release review
+# Community preview — release review
 
 Repository: https://github.com/jobmaking/openclaw-hub
 License: MIT. Publication authorized by the project owner on 2026-10-19.
@@ -16,6 +16,9 @@ License: MIT. Publication authorized by the project owner on 2026-10-19.
 - GitHub Actions repeats web/unit checks and image build for this public tree.
 - First private CI run found an undeclared Playwright/browser dependency. It is
   now pinned explicitly as a development dependency with Chromium setup in CI.
+- 1.0.32 review (2026-10-20): the exported web tests, Docker Compose validation
+  and image build passed. The operational Hub live acceptance covered the
+  collapsed session tree, derived-session expansion and the general E2E flow.
 
 ## Limits
 

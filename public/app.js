@@ -21,7 +21,7 @@ const state = {
   showAll: false,
   showOthers: false,      // ver cron/subagentes/canal en vez de las sesiones propias
   filter: '',             // texto del buscador del panel lateral
-  collapsed: {},         // "parentKey" -> true cuando el árbol está plegado
+  collapsed: {},         // "parentKey" -> false cuando el usuario lo ha desplegado; por defecto, plegado
   sortMode: (() => { try { return localStorage.getItem('hub.sort') || 'dia'; } catch { return 'dia'; } })(),   // 'dia' | 'recientes'
   questions: {},         // id -> registro de pregunta pendiente
   asyncQuestions: {},    // agent/session/item -> non-blocking structured choice
@@ -40,6 +40,9 @@ const state = {
 };
 
 const rk = (agentId, key) => `${agentId}|${key}`;   // clave de ejecución
+// El árbol nace plegado: solo se ven las sesiones raíz. Un valor `false`
+// explícito en state.collapsed marca la rama que el usuario ha desplegado.
+const isTreeCollapsed = (key) => state.collapsed[key] !== false;
 
 // Capture the request owner before awaiting it; a delayed failure must never
 // be attributed to whichever session happens to be open when it returns.
@@ -1195,7 +1198,7 @@ function renderSessions() {
       walkHide(child.key);
     }
   };
-  if (!q) for (const key of Object.keys(state.collapsed)) if (state.collapsed[key]) walkHide(key);
+  if (!q) for (const key of children.keys()) if (isTreeCollapsed(key)) walkHide(key);
 
   if (children.size) {
     const toolbar = document.createElement('div');
@@ -1204,7 +1207,7 @@ function renderSessions() {
     summary.textContent = roots.length + ' principal' + (roots.length === 1 ? '' : 'es') + ' · ' + (rows.length - roots.length) + ' derivadas';
     const toggleAll = document.createElement('button');
     toggleAll.className = 'archive-toggle';
-    const allCollapsed = [...children.keys()].every(key => state.collapsed[key]);
+    const allCollapsed = [...children.keys()].every(key => isTreeCollapsed(key));
     toggleAll.textContent = allCollapsed ? 'Desplegar todo' : 'Plegar todo';
     toggleAll.disabled = !!q;
     toggleAll.addEventListener('click', () => {
@@ -1292,7 +1295,7 @@ function renderSessions() {
       const origen = tipo === 'subagente' ? '↳ subtarea de: ' + madre
         : tipo ? '↳ ' + tipo + ' de: ' + madre
         : '↳ derivada de: ' + madre;
-      if (state.collapsed[s.parentKey] && s.parentKey) {
+      if (!q && s.parentKey && isTreeCollapsed(s.parentKey)) {
         subEl.className = 's-sub s-tag';
         const cola = sub && sub !== sessionTitle(s) ? sub.slice(0, 46) : '';
         subEl.textContent = origen + (cola ? ' · ' + cola : '');
@@ -1323,7 +1326,7 @@ function renderSessions() {
       // Un solo glifo que rota al abrir: se ve el estado de un vistazo
       const chev = document.createElement('span');
       chev.className = 'chev'; chev.textContent = '▶';
-      const expanded = !!q || !state.collapsed[s.key];
+      const expanded = !!q || !isTreeCollapsed(s.key);
       t.appendChild(chev);
       t.classList.toggle('open', expanded);
       t.title = (expanded ? 'Ocultar' : 'Mostrar') + ' ' + n + ' sesión' + (n === 1 ? '' : 'es') + ' derivada' + (n === 1 ? '' : 's');
@@ -1336,7 +1339,7 @@ function renderSessions() {
       meta.appendChild(branch);
       t.addEventListener('click', (e) => {
         e.stopPropagation();
-        state.collapsed[s.key] = !state.collapsed[s.key];
+        state.collapsed[s.key] = !isTreeCollapsed(s.key);
         renderSessions();
       });
       tw.appendChild(t);

@@ -1,6 +1,6 @@
 {
   "name": "openclaw-hub",
-  "version": "1.0.31-community.2",
+  "version": "1.0.32-community.1",
   "description": "Self-hosted multi-agent web interface for OpenClaw gateways",
   "main": "server.js",
   "private": true,

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.32-community.1 — collapsed session tree by default
+
+- The sidebar session tree starts collapsed: only root sessions are visible;
+  expand a branch or use “Expand all” to inspect derived sessions.
+- Search still reveals matching sessions together with their ancestors.
+- Preserve the published Playwright browser-test dependency and Chromium setup.
+- No operational deployment, customer data or private hosting profiles are included.
+
 ## 1.0.31-community.2 — include the optional Linux desktop client
 
 - Include desktop 1.0.2-community.1 source, installer and isolated native tests.
@@ -18,4 +26,4 @@
 - Include isolated backend, artifact, question and user-isolation regressions.
 - Add CI, security guidance, MIT project license and third-party notices.
 
-This package does not update any existing deployment and is not yet a public release.
+This package does not update any existing deployment.

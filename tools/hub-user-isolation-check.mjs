@@ -265,7 +265,9 @@ try {
       try { chromium = require(candidate).chromium; break; } catch {}
     }
     assert.ok(chromium, 'An installed playwright-core is required for the user boundary acceptance test');
-    const chrome = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || chromium.executablePath(), headless: true });
+    const executablePath = process.env.CHROMIUM_PATH
+      || (fs.existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : chromium.executablePath());
+    const chrome = await chromium.launch({ executablePath, headless: true });
     let phase = 'open', page;
     try {
       const context = await chrome.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: 'block' });
