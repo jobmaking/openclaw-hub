@@ -116,6 +116,10 @@ npm test --prefix desktop
 xvfb-run -a -s '-screen 0 1440x1000x24' node desktop/test/desktop-check.cjs
 ```
 
+The GUI suite additionally requires `python3-gi`, GTK3 and `python3-xlib`
+for a real URI-list drag source, and an isolated Xvfb display (not `:0` or `:1`).
+Never run its pointer automation on your interactive display.
+
 The GUI suite uses the actual frontend against a local fixture, temporary profiles
 and inert downloads. It checks uploads, clipboard, downloads/hashes, errors without
 navigation, persistence and renderer sandboxing. No production accounts or model
@@ -132,3 +136,9 @@ xvfb-run -a -s '-screen 0 1440x1000x24' env \
 
 Tests isolate profiles and notifications from your desktop. Passing them does not
 certify every Linux distribution, compositor or notification service.
+
+On Linux, the launcher selects X11/XWayland before Electron starts when `DISPLAY`
+is available. This is the validated native-file-drop path for embedded views.
+It does not change the desktop session or disable sandboxing. An explicit
+`--ozone-platform=wayland` overrides the preference; pure Wayland without
+XWayland retains automatic selection and has not been validated for file drops.

@@ -20,6 +20,19 @@ License: MIT. Publication authorized by the project owner on 2026-10-19.
   and image build passed. The operational Hub live acceptance covered the
   collapsed session tree, derived-session expansion and the general E2E flow.
 
+## 1.0.34 candidate review
+
+- Web 1.0.34-community.1 and optional Linux desktop 1.0.3-community.1 source.
+- Includes file-drop overlay recovery and Linux desktop native-drop compatibility.
+- Public CI includes the isolated clipboard/drag-and-drop browser fixture.
+- Candidate desktop: 47 GUI checks with the actual launcher, GTK native
+  URI-list PDF/ZIP batch, exact uploaded bytes, attachment chips and effective
+  renderer sandbox checks; 17 unit checks. Isolated browser drop suite: 19 checks.
+- The exact source commit is recorded in SOURCE.json; exported-package CI results
+  must be checked for the public release SHA. Historical counts above are separate.
+- Automated native fixtures are distinct from a physical file-manager drag.
+  Confirmation from the reporting Linux user remains pending.
+
 ## Limits
 
 This is a community preview, not a universal compatibility certification. No new

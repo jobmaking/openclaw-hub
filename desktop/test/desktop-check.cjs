@@ -52,8 +52,8 @@ const fixture = http.createServer((request, response) => {
   if (url.pathname === '/api/upload') {
     const chunks = []; request.on('data', (chunk) => chunks.push(chunk)); request.on('end', () => {
       const body = Buffer.concat(chunks); uploads.push(body);
-      const name = body.toString().match(/filename="([^"]+)"/)?.[1] || 'archivo.txt';
-      json({ files: [{ id: 'test-' + uploads.length, name, size: body.length, mimeType: name.endsWith('.png') ? 'image/png' : 'text/plain' }] });
+      const names = [...body.toString().matchAll(/filename="([^"]+)"/g)].map(match => match[1]);
+      json({ files: names.map((name, index) => ({ id: 'test-' + uploads.length + '-' + index, name, size: body.length, mimeType: name.endsWith('.png') ? 'image/png' : 'application/octet-stream' })) });
     }); return;
   }
   if (['/api/session-file', '/api/artifact-download'].includes(url.pathname)) {
@@ -130,8 +130,8 @@ class CDP {
 
 async function start() {
   fs.rmSync(path.join(profile, 'DevToolsActivePort'), { force: true });
-  child = spawn(path.join(root, 'node_modules/electron/dist/electron'), [root, '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', '--ozone-platform=x11'],
-    { env: { ...process.env, DBUS_SESSION_BUS_ADDRESS: 'unix:path=' + path.join(evidence, 'no-session-bus'), HUB_URL: 'http://127.0.0.1:' + fixture.address().port, HUB_USER_DATA_DIR: profile }, stdio: ['ignore', 'pipe', 'pipe'] });
+  child = spawn(path.join(root, 'openclaw-hub-desktop'), ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1'],
+    { env: { ...process.env, DBUS_SESSION_BUS_ADDRESS: 'unix:path=' + path.join(evidence, 'no-session-bus'), HUB_URL: 'http://127.0.0.1:' + fixture.address().port, HUB_USER_DATA_DIR: profile, XDG_CONFIG_HOME: path.join(evidence, 'config'), XDG_STATE_HOME: path.join(evidence, 'state') }, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stderr.on('data', (chunk) => { log += chunk.toString(); });
   await until('Electron DevTools', () => fs.existsSync(path.join(profile, 'DevToolsActivePort')) && fs.readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]);
   port = fs.readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0];
@@ -177,7 +177,14 @@ async function stop() {
   await new Promise((resolve) => fixture.listen(0, '127.0.0.1', resolve));
   try {
     await start();
-    check('real Electron starts with Chromium sandbox enabled', !log.includes('No usable sandbox') && !child.spawnargs.includes('--no-sandbox'));
+    const debugVersion = await (await fetch('http://127.0.0.1:' + port + '/json/version')).json();
+    const browserCDP = await CDP.connect(debugVersion.webSocketDebuggerUrl);
+    const processInfo = await browserCDP.send('SystemInfo.getProcessInfo'); browserCDP.close();
+    const renderers = processInfo.processInfo.filter(process => process.type === 'renderer');
+    const statuses = renderers.map(process => fs.readFileSync('/proc/' + process.id + '/status', 'utf8'));
+    check('both renderer processes have effective seccomp, NoNewPrivs and nested PID sandbox', statuses.length >= 2 && statuses.every(status => /NoNewPrivs:\s+1/.test(status) && /Seccomp:\s+2/.test(status) && status.match(/^NSpid:\s+(.+)$/m)?.[1].trim().split(/\s+/).length > 1));
+    const processArgs = fs.readFileSync('/proc/' + child.pid + '/cmdline', 'utf8').split('\0');
+    check('Linux launcher selects X11 before Electron starts', /(?:^|\s)--ozone-platform=x11(?:\s|$)/.test(processArgs.join(' ')) && !processArgs.join(' ').includes('--no-sandbox'));
     check('remote Hub has neither Node nor the desktop IPC bridge', await guest.evaluate('typeof require === "undefined" && typeof process === "undefined" && typeof hubDesktop === "undefined"'));
     check('desktop has no horizontal overflow', await shell.evaluate('document.documentElement.scrollWidth === innerWidth'));
     await guest.evaluate('fetch("/api/login",{method:"POST"}).then(r=>r.ok)');
@@ -237,9 +244,19 @@ async function stop() {
     await until('attachment chip', () => guest.evaluate('document.getElementById("chips").children.length===1'));
     check('file selected in desktop appears as a Hub attachment', true);
     await guest.send('Page.setInterceptFileChooserDialog', { enabled: false });
-    await guest.evaluate(`(() => { const dt=new DataTransfer();dt.items.add(new File(['drag-drop-marker'],'arrastrado.txt',{type:'text/plain'}));document.getElementById('main').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt})); })()`);
+    const draggedFile = path.join(evidence, 'arrastrado.pdf');
+    fs.writeFileSync(draggedFile, '%PDF-1.4\ndrag-drop-marker\n%%EOF');
+    const dropPoint = await guest.evaluate('(() => {const r=document.getElementById("main").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
+    const zipFile = path.join(evidence, 'documentos.zip'), secondPdf = path.join(evidence, 'segundo.pdf');
+    fs.writeFileSync(zipFile, 'PK\x03\x04zip-native-marker'); fs.writeFileSync(secondPdf, '%PDF-1.4\nsecond-pdf-marker\n%%EOF');
+    const origin = await guest.evaluate('({x:screenX,y:screenY})');
+    const nativeSource = spawnSync('/usr/bin/python3', [path.join(__dirname, 'native-drag.py'), String(Math.round(origin.x + dropPoint.x)), String(Math.round(origin.y + dropPoint.y)), draggedFile, zipFile, secondPdf], {env: process.env, encoding:'utf8', timeout:20000});
+    fs.writeFileSync(path.join(evidence, 'native-drag.log'), nativeSource.stdout + nativeSource.stderr);
+    check('GTK URI-list source completes an OS-native file drop', nativeSource.status === 0);
     await until('drag upload', () => uploads.length === 2);
-    check('drag-and-drop uploads the dropped file bytes', uploads[1].includes(Buffer.from('drag-drop-marker')));
+    check('OS-native PDF and ZIP batch uploads exact bytes', [draggedFile, zipFile, secondPdf].every(file => uploads[1].includes(fs.readFileSync(file))));
+    await until('native batch chips', () => guest.evaluate('state.pendingFiles.length===4'));
+    check('all dropped documents appear as separate attachment chips', await guest.evaluate('state.pendingFiles.map(file=>file.name).includes("documentos.zip")'));
     await guest.evaluate(`(async () => { const canvas=document.createElement('canvas');canvas.width=32;canvas.height=32;canvas.getContext('2d').fillRect(0,0,32,32);const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);document.getElementById('input').focus(); })()`);
     await guest.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'v', code: 'KeyV', modifiers: 2, windowsVirtualKeyCode: 86 });
     await guest.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'v', code: 'KeyV', modifiers: 2, windowsVirtualKeyCode: 86 });
@@ -294,7 +311,7 @@ async function stop() {
     check('compact desktop keeps controls and downloads inside the window', await shell.evaluate('document.documentElement.scrollWidth===innerWidth && document.getElementById("downloads").getBoundingClientRect().right===innerWidth'));
     await shell.evaluate('hubDesktop.command("window-size","wide")');
     await shell.evaluate('hubDesktop.command("downloads",false)');
-    const second = spawn(path.join(root, 'node_modules/electron/dist/electron'), [root, '--downloads', '--ozone-platform=x11'], { env: { ...process.env, HUB_URL: 'http://127.0.0.1:' + fixture.address().port, HUB_USER_DATA_DIR: profile }, stdio: 'ignore' });
+    const second = spawn(path.join(root, 'openclaw-hub-desktop'), ['--downloads'], { env: { ...process.env, HUB_URL: 'http://127.0.0.1:' + fixture.address().port, HUB_USER_DATA_DIR: profile, XDG_CONFIG_HOME: path.join(evidence, 'config'), XDG_STATE_HOME: path.join(evidence, 'state') }, stdio: 'ignore' });
     const [code] = await once(second, 'exit');
     await until('single-instance activation', () => shell.evaluate('state.downloadsOpen'));
     check('a second launch reuses the existing window', code === 0);

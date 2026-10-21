@@ -4,7 +4,7 @@ A self-hosted web interface for your OpenClaw agents. Bring several gateways int
 one place, with streaming chat, conversation history, files and per-user access.
 
 **Independent community project. Not an official OpenClaw product.**
-This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.0.32. The interface is
+This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.0.34. The interface is
 currently Spanish-first. A running OpenClaw gateway and its model configuration
 are required; this repository does not include models, API credits or a gateway.
 
@@ -16,6 +16,7 @@ are required; this repository does not include models, API credits or a gateway.
 - Model and reasoning controls using capabilities advertised by your gateway.
 - Blocking and optional questions, tool approvals and reconnect recovery.
 - Uploads, previews and authorized native deliverables.
+- File drag-and-drop recovery, including the Linux desktop X11/XWayland file-drop path.
 - Scrypt password hashes, signed login cookies and per-user agent/conversation access.
 - Responsive layout and installable PWA; optional browser notifications.
 
@@ -74,6 +75,7 @@ use `CHROMIUM_PATH` to select a compatible browser already installed.
 
 Tests exercise the real backend against simulated local gateways: authentication,
 user/session isolation, file boundaries, native question contracts and artifacts.
+An isolated browser fixture also checks clipboard and drag-and-drop recovery.
 They do not use production credentials or call models. CI also builds the Docker
 image. Test fixture credentials and names are synthetic.
 
@@ -89,7 +91,7 @@ bash desktop/install.sh
 Open **OpenClaw HUB** in the applications menu. It connects to localhost:18900 by
 default; set your own server in its private configuration. No gateway credentials
 or saved login are bundled. Requires Node22.12+, npm and a Linux graphical desktop.
-The installer downloads the pinned Electron runtime. The desktop client is optional
+The installer downloads the pinned Electron runtime. The desktop client (1.0.3-community.1) is optional
 and versioned separately; it does not start the server or include models.
 Full setup, features and sandbox requirements: [desktop/README.md](desktop/README.md).
 

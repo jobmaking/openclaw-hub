@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.34-community.1 — file drag-and-drop recovery
+
+- Clear the file-drop overlay after cancellation, leaving the window and dropping
+  outside the chat; avoid intercepting unrelated drags or navigating to files.
+- Include Linux desktop 1.0.3-community.1 with native file-drop compatibility.
+- Include the isolated browser clipboard/drag-and-drop regression in public CI.
+- Native fixtures and automated checks do not establish physical file-manager
+  compatibility on every Linux desktop; user confirmation remains pending.
+
 ## 1.0.32-community.1 — collapsed session tree by default
 
 - The sidebar session tree starts collapsed: only root sessions are visible;

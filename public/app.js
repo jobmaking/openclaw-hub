@@ -2619,16 +2619,52 @@ $('btn-attach').addEventListener('click', () => $('file-input').click());
 $('file-input').addEventListener('change', (e) => { uploadFiles(e.target.files); e.target.value = ''; });
 
 const main = $('main');
-['dragenter', 'dragover'].forEach(ev => main.addEventListener(ev, (e) => {
-  e.preventDefault(); if (supports('files')) $('drop-overlay').classList.remove('hidden');
-}));
-['dragleave', 'drop'].forEach(ev => main.addEventListener(ev, (e) => {
-  e.preventDefault(); if (ev === 'drop' || e.target === $('drop-overlay')) $('drop-overlay').classList.add('hidden');
-}));
-main.addEventListener('drop', (e) => {
+let dropOverlayTimer;
+function clearDropOverlay() {
+  clearTimeout(dropOverlayTimer);
   $('drop-overlay').classList.add('hidden');
-  if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files);
+}
+function isFileDrag(e) {
+  return Array.from(e.dataTransfer?.types || []).includes('Files');
+}
+function acceptsFileDrop() {
+  return !$('app').classList.contains('hidden') && supports('files');
+}
+['dragenter', 'dragover'].forEach(ev => main.addEventListener(ev, (e) => {
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  if (!acceptsFileDrop()) return;
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  $('drop-overlay').classList.remove('hidden');
+  // Native file managers / Electron may omit dragleave and dragend on cancel.
+  clearTimeout(dropOverlayTimer);
+  dropOverlayTimer = setTimeout(clearDropOverlay, 1500);
+}));
+main.addEventListener('dragleave', (e) => {
+  if (e.relatedTarget && main.contains(e.relatedTarget)) return;
+  const bounds = main.getBoundingClientRect();
+  if (!e.relatedTarget || e.clientX <= bounds.left || e.clientX >= bounds.right ||
+      e.clientY <= bounds.top || e.clientY >= bounds.bottom) clearDropOverlay();
 });
+// Capture across the document: releasing over a drawer must also dismiss the
+// overlay, and must never navigate the app to the dropped file.
+document.addEventListener('drop', (e) => {
+  clearDropOverlay();
+  if (!isFileDrag(e)) return;
+  e.preventDefault();
+  if (main.contains(e.target) && acceptsFileDrop() && e.dataTransfer.files.length) {
+    uploadFiles(e.dataTransfer.files);
+  }
+}, true);
+document.addEventListener('dragover', (e) => {
+  if (isFileDrag(e)) e.preventDefault();
+  if (!main.contains(e.target)) clearDropOverlay();
+}, true);
+document.addEventListener('dragend', clearDropOverlay, true);
+document.addEventListener('pointerdown', clearDropOverlay, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') clearDropOverlay(); }, true);
+window.addEventListener('blur', clearDropOverlay);
+document.addEventListener('visibilitychange', () => { if (document.hidden) clearDropOverlay(); });
 
 // Pegar (Ctrl+V / ⌘V) en el panel: el TEXTO lo inserta el navegador solo, pero una
 // CAPTURA o un fichero del portapapeles no lo recogía nadie -> al pegar no pasaba

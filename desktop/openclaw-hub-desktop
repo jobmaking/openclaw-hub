@@ -22,4 +22,14 @@ fi
 # The installer configures a trusted sandbox helper where needed. Chromium's
 # sandbox stays enabled; no AppArmor or user-namespace settings are changed.
 mkdir -p -m 700 "$STATE_DIR"
-exec "$ELECTRON" "$APP_DIR" "$@" >>"$STATE_DIR/native.log" 2>&1
+# Select Ozone before Electron starts; setting it from main.cjs is too late.
+# Use the validated X11/XWayland file-drop path when a display is available.
+BACKEND_ARGS=()
+if [ -n "${DISPLAY:-}" ]; then
+  HAS_BACKEND=0
+  for ARG in "$@"; do
+    case "$ARG" in --ozone-platform|--ozone-platform=*) HAS_BACKEND=1 ;; esac
+  done
+  if [ "$HAS_BACKEND" = 0 ]; then BACKEND_ARGS=(--ozone-platform=x11); fi
+fi
+exec "$ELECTRON" "$APP_DIR" "${BACKEND_ARGS[@]}" "$@" >>"$STATE_DIR/native.log" 2>&1

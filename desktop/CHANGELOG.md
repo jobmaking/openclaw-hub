@@ -1,5 +1,13 @@
 # Hub para Linux
 
+## 1.0.3
+
+- Prefer X11/XWayland when available for the validated native file-drop path.
+  Honor explicit --ozone-platform overrides and preserve Wayland-only startup.
+- Test actual GTK URI-list drags with PDF/ZIP files into Electron, including
+  upload bytes and attachment chips, rather than only synthetic DOM events.
+- Keep the existing profile, sandbox, downloads and web attachment limits.
+
 ## 1.0.2
 
 - Deliver native Linux notifications for pending questions and permissions,

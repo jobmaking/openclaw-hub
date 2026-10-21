@@ -101,6 +101,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus
 .model-reset { background: transparent; border-color: transparent; color: #bdcadf; font-size: 11px; }
 .messages { padding: 36px max(32px, calc((100% - var(--content-width)) / 2)) 28px; gap: 28px; min-height: 0; scroll-padding-block: 24px; }
 .session-panels { flex: 0 1 auto; min-height: 0; max-height: var(--session-panels-max-height, min(62dvh, 560px)); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+/* One scrollport for panels and questions: an inner contained scroller can
+   strand the reply action below the parent's clipping edge on touch devices. */
+.session-panels > .prompts { max-height: none; overflow: visible; }
 .session-settings { flex: none; min-height: 0; max-height: var(--model-settings-max-height, none); overflow-y: auto; overscroll-behavior: contain; }
 .composer-extras { min-height: 0; max-height: var(--composer-extra-max-height, none); overflow-y: auto; overscroll-behavior: contain; }
 .msg { font-size: 15px; line-height: 1.7; }

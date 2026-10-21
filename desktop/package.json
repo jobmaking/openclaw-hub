@@ -1,7 +1,7 @@
 {
   "name": "openclaw-hub-desktop",
   "productName": "Hub",
-  "version": "1.0.2-community.1",
+  "version": "1.0.3-community.1",
   "private": true,
   "description": "Hub desktop for Linux, with native file transfers",
   "main": "main.cjs",
