@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const publicDir = process.env.HUB_ASSET_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
@@ -57,11 +57,13 @@ const server = http.createServer((request, response) => {
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 
-const chromiumPath = process.env.CHROMIUM_PATH || (await import('playwright-core')).chromium.executablePath();
-const chrome = spawn(chromiumPath, [
-  '--headless=new', '--remote-debugging-port=0', '--no-first-run', '--no-default-browser-check',
-  '--user-data-dir=' + profile, '--disable-gpu', '--window-size=1280,900', 'about:blank',
-], { stdio: 'ignore' });
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
+const chrome = await chromium.launchPersistentContext(profile, {
+  executablePath: process.env.CHROMIUM_PATH || chromium.executablePath(),
+  headless: true,
+  args: ['--remote-debugging-port=0', '--window-size=1280,900'],
+});
 
 let socket;
 try {
@@ -194,7 +196,7 @@ try {
   console.log('captura: /tmp/hub-paste-local-check.png');
 } finally {
   if (socket) socket.close();
-  chrome.kill();
+  await chrome.close();
   server.close();
   try { fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch {}  // Chrome tarda en soltar el perfil
 }
