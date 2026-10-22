@@ -1,8 +1,8 @@
 # OpenClaw HUB for Linux (optional)
 
 A sandboxed Electron client for an existing Hub server, with a persistent login,
-native uploads, download management and Linux notifications. The client does not
-start a Hub server, run models or bypass server permissions. Its version is
+native uploads, download management, Linux notifications and microphone-only
+voice-note permission. The client does not start a Hub server, run models or bypass server permissions. Its version is
 independent of the server version. Windows/macOS builds are not included or tested.
 
 ## Install
@@ -72,6 +72,22 @@ single-instance client keeps its current server until closed/reopened.
 - Downloads go to the system Downloads/Hub folder by default. Uninstalling does
   not remove downloaded files.
 
+## Microphone and voice notes
+
+The Hub web interface records voice notes only after the desktop asks for native
+consent for that exact Hub origin. Consent covers **audio input only**:
+camera, screen capture and same-origin subframes remain denied. A microphone
+button in the toolbar shows the current state and revokes it; the menu exposes
+the same switch. Revoking stops an active recording and keeps its audio and text
+draft. The permission is remembered per origin and is not inherited by another
+server.
+
+The desktop process only brokers the permission; recording, preview, playback,
+transcription and speech remain in the authenticated Hub page and the local voice
+service configured by the Hub operator. No microphone audio is sent to a cloud
+service by this client. If the browser blocks automatic playback, use the
+visible player. The microphone is never opened just by opening a conversation.
+
 ## Browser alternative
 
 ```bash
@@ -114,6 +130,7 @@ npm ci --prefix desktop
 node desktop/node_modules/electron/install.js
 npm test --prefix desktop
 xvfb-run -a -s '-screen 0 1440x1000x24' node desktop/test/desktop-check.cjs
+xvfb-run -a -s '-screen 0 1440x1000x24' node desktop/test/microphone-check.cjs
 ```
 
 The GUI suite additionally requires `python3-gi`, GTK3 and `python3-xlib`
