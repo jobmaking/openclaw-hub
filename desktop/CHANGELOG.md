@@ -1,5 +1,14 @@
 # Hub para Linux
 
+## 1.0.4
+
+- Allow microphone-only voice notes after a native consent dialog for the Hub
+  origin and main frame; camera, screen and subframe requests stay blocked.
+- Remember this consent per origin and make it revocable from a visible,
+  accessible microphone button and the native menu, stopping an active recording
+  while retaining its audio/text draft.
+- Preserve the existing profile, sandbox, X11/XWayland path and file transfers.
+
 ## 1.0.3
 
 - Prefer X11/XWayland when available for the validated native file-drop path.

@@ -99,6 +99,10 @@ function render(next) {
   $('notification-toggle').setAttribute('aria-pressed', String(state.notifications));
   $('notification-toggle').setAttribute('aria-label', notificationTitle); $('notification-toggle').title = notificationTitle;
   $('notification-toggle').dataset.status = state.notificationStatus;
+  const microphoneTitle = state.microphone ? 'Permiso de micrófono activado. Pulsa para desactivarlo y detener la grabación.'
+    : 'Permiso de micrófono desactivado. Pulsa para activarlo.';
+  $('microphone-toggle').setAttribute('aria-pressed', String(state.microphone));
+  $('microphone-toggle').setAttribute('aria-label', microphoneTitle); $('microphone-toggle').title = microphoneTitle;
   $('maximize').setAttribute('aria-label', state.maximized ? 'Restaurar ventana' : 'Maximizar');
   $('maximize').title = state.maximized ? 'Restaurar ventana' : 'Maximizar';
   $('maximize').querySelector('use').setAttribute('href', state.maximized ? '#i-restore' : '#i-maximize');
@@ -119,6 +123,7 @@ document.addEventListener('click', (event) => {
   const name = action.dataset.command;
   if (name === 'downloads') command('downloads', !state.downloadsOpen);
   else if (name === 'notifications') command('notifications', !state.notifications);
+  else if (name === 'microphone') command('microphone', !state.microphone);
   else if (name === 'downloads-close') { command('downloads', false); $('download-toggle').focus(); }
   else if (name === 'find-close') command('find', false);
   else if (name === 'zoom-out') command('zoom', -1);

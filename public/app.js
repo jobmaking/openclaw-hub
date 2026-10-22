@@ -327,7 +327,7 @@ function writeDraft(draft, agent = state.agent, key = state.current) {
   const saved = { ...draft, t: Date.now() };
   draftCache.set(rk(agent, key), saved);
   try {
-    if (saved.text || saved.files?.length || saved.submission) localStorage.setItem(draftKey(agent, key), JSON.stringify(saved));
+    if (saved.text || saved.files?.length || saved.voiceNote || saved.submission) localStorage.setItem(draftKey(agent, key), JSON.stringify(saved));
     else localStorage.removeItem(draftKey(agent, key));
     if (state.legacyStorageOwner) localStorage.removeItem(legacyDraftKey(agent, key));
   } catch { /* The in-memory draft remains usable when storage is unavailable. */ }
@@ -343,6 +343,7 @@ function restoreDraft() {
   renderChips();
   autogrow();
   updateComposerState();
+  window.HubVoice?.renderDraft();
 }
 function clearDraft(agent = state.agent, key = state.current) {
   draftCache.delete(rk(agent, key));
@@ -461,6 +462,7 @@ async function selectAgent(id, restoreKey = null) {
 }
 
 function showLogin() {
+  window.HubVoice?.reset();
   window.HubQueue?.reset();
   $('login-view').classList.remove('hidden');
   $('app').classList.add('hidden');
@@ -478,6 +480,8 @@ $('login-form').addEventListener('submit', async (e) => {
 });
 
 $('btn-logout').addEventListener('click', async () => {
+  saveDraft();
+  window.HubVoice?.reset();
   try {
     const sub = await swReg?.pushManager.getSubscription();
     if (sub) await hubFetch('/api/push-sub', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) });
@@ -1499,6 +1503,7 @@ async function selectSession(key, options = {}) {
   historyReadVersions.set(rk(agentId, key), historyVersion);
   const questionEpoch = asyncQuestionEpochs.get(rk(agentId, key));
   state.current = key;
+  window.HubVoice?.select(voiceContext());
   window.HubActivity?.select(agentId, key);
   state.historyLoading = true;
   renameEditing = null;
@@ -1577,6 +1582,7 @@ async function selectSession(key, options = {}) {
   else scrollBottom(true);
   tipKeyboardOnce();
   renderPrompts();   // el aviso es de esta sesión: se pinta (o se quita el de otra)
+  window.HubVoice?.history(voiceContext(), page.messages);
   if (!isMobile() && !options.anchor) $('input').focus();  // un resultado exacto conserva su foco
 }
 
@@ -1712,6 +1718,7 @@ function focusHistoryAnchor(page, id) {
 }
 
 function renderEmpty() {
+  window.HubVoice?.reset();
   window.HubQueue?.select(null, null);
   const a = curAgent();
   $('chat-title').textContent = a ? `${a.emoji} ${a.name}` : 'Elige un agente';
@@ -1928,6 +1935,7 @@ function renderToolBlock(entries) {
 // reloadFinalMessages: antes divergían y el reload post-turno colapsaba las tools
 // a render plano ("se peta el texto hasta F5", 2026-10-11).
 function renderHistorySequence(box, messages) {
+  window.HubVoice?.beforeHistoryRender(box);
   box.replaceChildren(historyNodes(messages));
   renderKnownAsyncQuestions(box);
   renderQuestionAttention();
@@ -1944,9 +1952,9 @@ function historyNodes(messages) {
     if (m.diagnostic) window.HubActivity?.reportError(m.diagnostic, { agentId: state.agent, sessionKey: state.current });
     if (m.role === 'user') {
       flushTools();
-      items.push({ type: 'user', text: m.text || '', ts: m.ts, id: m.id });
+      items.push({ ...m, type: 'user', text: m.text || '', ts: m.ts, id: m.id });
     } else if (m.role === 'assistant') {
-      if ((m.text && m.text.trim()) || m.asyncQuestion) { flushTools(); items.push({ type: 'assistant', text: m.text || '', ts: m.ts, id: m.id, asyncQuestion: m.asyncQuestion }); }
+      if ((m.text && m.text.trim()) || m.asyncQuestion) { flushTools(); items.push({ ...m, type: 'assistant', text: m.text || '', ts: m.ts, id: m.id, asyncQuestion: m.asyncQuestion }); }
       if (m.tools && m.tools.length) { toolBuf.push(...m.tools.map(c => ({ call: c }))); if (m.id) toolIds.push(m.id); }
     } else if (m.role === 'toolResult' && m.tool) {
       const match = toolBuf.find(x => x.call && !x.result && (!m.tool.id || x.call.id === m.tool.id));
@@ -1972,6 +1980,7 @@ function historyNodes(messages) {
       const meta = document.createElement('div'); meta.className = 'meta';
       if (it.ts) meta.textContent = new Date(it.ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
       if (it.id) bubble.el.dataset.historyId = it.id;
+      window.HubVoice?.mountMessage(bubble, it, voiceContext());
       bubble.el.appendChild(meta); fragment.appendChild(bubble.el);
     }
   }
@@ -2131,6 +2140,7 @@ function onTerminal(m) {
   }
   if (window.HubActivity && !window.HubActivity.guardTerminal(m)) return;
   if (m.agentId === state.agent && m.sessionKey === state.current && RUN.runId && m.runId && RUN.runId !== m.runId) return;
+  window.HubVoice?.terminal(m);
   const rkey = rk(m.agentId, m.sessionKey);
   const isCurrent = () => m.agentId === state.agent && m.sessionKey === state.current;
   if (m.type === 'error') {
@@ -2221,6 +2231,7 @@ async function reloadFinalMessages(key) {
   if (wasPinned) scrollBottom(true);
   else { box.scrollTop = scrollTop; state.pinned = false; }
   updateLatestButton();
+  window.HubVoice?.history(voiceContext(), page?.messages || r.messages);
 }
 
 function editingAsyncQuestion() {
@@ -2452,6 +2463,7 @@ function updateComposerState() {
   const question = hasCurrentQuestion();
   const offline = state.ws?.readyState !== WebSocket.OPEN || !curAgent()?.connected;
   $('btn-send').disabled = !!modelSettingsPending || state.historyLoading || pending || stopping || !!uploading || question || offline || !state.current;
+  if (window.HubVoice?.busy()) $('btn-send').disabled = true;
   $('btn-attach').disabled = pending || question || !state.current;
   $('input').readOnly = pending;
   $('input').disabled = question;
@@ -2459,6 +2471,7 @@ function updateComposerState() {
   $('btn-stop').disabled = offline || stopping;
   $('btn-stop').title = stopping ? 'Deteniendo; esperando turno inactivo y cola vacía' : 'Parar respuesta y vaciar la cola';
   document.querySelectorAll('#chips .x').forEach(button => { button.disabled = pending; });
+  window.HubVoice?.setLocked(pending || stopping || question || state.historyLoading || !!modelSettingsPending || !!uploading || !state.current);
   const notice = sendNotices.get(scope);
   const text = stopping ? 'Deteniendo… Esperando confirmar el turno inactivo y la cola vacía.'
     : pending ? 'Enviando… El borrador está protegido hasta confirmar.'
@@ -2471,7 +2484,8 @@ function updateComposerState() {
   status.classList.toggle('error', !!notice?.error && !pending && !uploading);
 }
 function sameSubmission(draft, attempt) {
-  return draft.text === attempt.text && JSON.stringify((draft.files || []).map(file => file.id)) === JSON.stringify((attempt.files || []).map(file => file.id));
+  return draft.text === attempt.text && (draft.voiceNote?.id || null) === (attempt.voiceNote?.id || null)
+    && JSON.stringify((draft.files || []).map(file => file.id)) === JSON.stringify((attempt.files || []).map(file => file.id));
 }
 function newClientId() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -2509,6 +2523,7 @@ function handleSendResult(message, accepted) {
   pendingSends.delete(scope);
   sendNotices.delete(scope);
   if (job?.bubble) { job.bubble.el.classList.remove('pending-send'); job.bubble.meta.textContent = 'Enviado'; }
+  window.HubVoice?.accepted(message, attempt);
   if (sameSubmission(draft, attempt)) clearDraft(message.agentId, message.sessionKey);
   else { const updated = { ...draft }; delete updated.submission; writeDraft(updated, message.agentId, message.sessionKey); }
   if (state.agent === message.agentId && state.current === message.sessionKey) restoreDraft();
@@ -2517,6 +2532,7 @@ function handleSendResult(message, accepted) {
 }
 
 function send() {
+  if (window.HubVoice?.busy()) { saveDraft(); toast('Detén y transcribe la nota de voz antes de enviarla'); return; }
   if (stopPending.has(rk(state.agent, state.current))) { saveDraft(); toast('Espera a confirmar la parada; el borrador se conserva'); return; }
   // Keyboard shortcuts must respect the same pending-save guard as the button.
   if (modelSettingsPending) { toast('Guardando los ajustes; el mensaje sigue en el borrador'); return; }
@@ -2534,7 +2550,7 @@ function send() {
   saveDraft();
   const draft = readDraft();
   const id = draft.submission && sameSubmission(draft, draft.submission) ? draft.submission.id : newClientId();
-  const submission = { id, text: draft.text, files: [...draft.files] };
+  const submission = { id, text: draft.text, files: [...draft.files], ...(draft.voiceNote ? { voiceNote: { ...draft.voiceNote } } : {}) };
   writeDraft({ ...draft, submission });
   const job = { ...submission, agentId: state.agent, key: state.current, requestId: newClientId(), wasRunning: isRunning(state.sessions.find(session => session.key === state.current)) || !!state.runningByKey[scope] };
   const atts = state.pendingFiles.map(f => ({ id: f.id, name: f.name, mimeType: f.mimeType }));
@@ -2545,12 +2561,14 @@ function send() {
   job.bubble = bubble;
   renderRich(bubble.body, text || '', { plain: true });
   for (const f of state.pendingFiles) bubble.body.appendChild(renderAttachment(f));
+  if (draft.voiceNote) window.HubVoice?.mountMessage(bubble, { role: 'user', voiceNote: draft.voiceNote }, voiceContext());
   bubble.el.appendChild(bubble.meta);
   $('messages').appendChild(bubble.el);
   pendingSends.set(scope, job);
   sendNotices.delete(scope);
   job.timer = setTimeout(() => recoverSend(job, 'El envío no se ha confirmado.', true), 35000);
-  try { state.ws.send(JSON.stringify({ type: 'send', agentId: state.agent, sessionKey: state.current, text, attachments: atts, clientMessageId: id, requestId: job.requestId })); }
+  try { state.ws.send(JSON.stringify({ type: 'send', agentId: state.agent, sessionKey: state.current, text, attachments: atts, clientMessageId: id, requestId: job.requestId,
+    ...(draft.voiceNote ? { voiceNoteId: draft.voiceNote.id } : {}) })); }
   catch { recoverSend(job, 'No se pudo conectar con el servidor.'); return; }
   setRunning(state.agent, state.current, true);
   state.pinned = true;   // el usuario acaba de enviar: quiere ver la respuesta
@@ -2563,7 +2581,7 @@ $('btn-send').addEventListener('click', send);
 // teclado inserta salto de línea y se envía con el botón ➤ (Ctrl/Cmd+Enter envía igual).
 const coarsePointer = () => window.matchMedia('(pointer: coarse)').matches;
 function applyComposerHint() {
-  $('input').placeholder = 'Escribe un mensaje…';
+  $('input').placeholder = 'Escribe…';
   if ($('composer-hint')) $('composer-hint').textContent = coarsePointer() ? '' : 'Enter para enviar · Shift + Enter para una nueva línea';
 }
 applyComposerHint();
@@ -3900,7 +3918,7 @@ document.addEventListener('touchstart', (e) => {
   if (document.body.classList.contains('sel-mode')) return;
   // Embedded question fields and controls own their native touch/edit gestures.
   // The message menu must never cover a response while its text is being edited.
-  if (e.target.closest?.('.async-question, button, input, textarea, select, a, summary, [contenteditable="true"]')) return;
+  if (e.target.closest?.('.async-question, .voice-player, audio, button, input, textarea, select, a, summary, [contenteditable="true"]')) return;
   const el = e.target.closest && e.target.closest('.msg');
   if (!el || !el.closest('#messages')) return;
   const t = e.touches[0];
@@ -4010,7 +4028,9 @@ function scheduleStreamRender() {
     app.classList.add('viewport-fit'); app.classList.toggle('viewport-compact', height <= 540);
     app.style.height = height + 'px';
     app.style.transform = vv?.offsetTop ? `translateY(${vv.offsetTop}px)` : '';
-    variable('--composer-extra-max-height', Math.max(44, Math.min(68, Math.floor(height * 0.14))) + 'px');
+    const voiceOpen = !$('voice-draft')?.classList.contains('hidden') && !document.body.classList.contains('prompt-open');
+    variable('--composer-extra-max-height', voiceOpen ? Math.max(96, Math.min(230, Math.floor(height * 0.34))) + 'px'
+      : Math.max(44, Math.min(68, Math.floor(height * 0.14))) + 'px');
     variable('--model-settings-max-height', Math.max(44, Math.floor(height * 0.20)) + 'px');
     variable('--question-editor-max-height', Math.max(46, Math.min(150, Math.floor(height * 0.24))) + 'px');
     const composer = $('composer');
@@ -4143,4 +4163,16 @@ window.HubActivity?.init({
   },
 });
 installSessionBrowseUI();
+function voiceContext() {
+  return { user: state.user, agent: state.agent, key: state.current, voiceEnabled: curAgent()?.voiceEnabled === true,
+    sessionId: historyPages.get(rk(state.agent, state.current))?.sessionId || null };
+}
+window.HubVoice?.init({
+  context: voiceContext,
+  fetch: hubFetch,
+  readDraft: owner => readDraft(owner.agent, owner.key),
+  writeDraft: (draft, owner) => writeDraft(draft, owner.agent, owner.key),
+  saveDraft, restoreDraft, updateComposer: updateComposerState,
+  refreshHistory: owner => { if (owner.agent === state.agent && owner.key === state.current) reloadFinalMessages(owner.key); },
+});
 boot();

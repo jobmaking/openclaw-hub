@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
-const { hubUrl, externalUrl, sameOrigin, hubDocument, downloadLink, nextDownloadPath, readJson, writeJson, restoreDownloads, windowBounds } = require('./core.cjs');
+const { hubUrl, externalUrl, sameOrigin, hubDocument, microphonePermission, downloadLink, nextDownloadPath, readJson, writeJson, restoreDownloads, windowBounds } = require('./core.cjs');
 const { snapshotScript, openScript, pendingItems, HubNotifications } = require('./notifications.cjs');
 const version = require('./package.json').version;
 
@@ -27,6 +27,7 @@ else {
   let loading = true, loadError = '', findOpen = false, findResult = null, toast = '';
   let flushTimer, toastTimer, windowTimer, progressTimer;
   let notifier, notificationTimer, notificationRead = false, notificationEpoch = 0;
+  let microphonePrompt = null, microphoneEpoch = 0;
   const otherNotifications = new Set();
   const items = new Map(), reserved = new Set(), previousBytes = new Map();
   const downloadIntents = new Map(), downloadRequests = new Map();
@@ -55,6 +56,7 @@ else {
       minimized: Boolean(win?.isMinimized()), focused: Boolean(win?.isFocused()),
       notifications: Boolean(settings?.notifications), notificationsSupported: Notification.isSupported(),
       notificationStatus: notifier?.status || 'connecting',
+      microphone: settings?.microphone === true,
       zoom: Math.round((settings?.zoom || 1) * 100), askSave: Boolean(settings?.askSave),
       directory: settings?.directory || '',
       downloads: (records || []).slice(0, 100).map(({ id, name, state, received, total, paused, resumable, speed }) =>
@@ -271,6 +273,8 @@ else {
       { label: 'Notificaciones de preguntas y permisos', type: 'checkbox', checked: settings.notifications,
         click: (item) => setNotifications(item.checked) },
       { label: 'Probar notificación', enabled: settings.notifications && Notification.isSupported(), click: testNotification },
+      { label: 'Permitir micrófono para notas de voz', type: 'checkbox', checked: settings.microphone === true,
+        click: item => setMicrophone(item.checked) },
       { type: 'separator' },
       { label: 'Preguntar dónde guardar cada archivo', type: 'checkbox', checked: settings.askSave,
         click: (item) => { settings.askSave = item.checked; saveSettings(); publish(); } },
@@ -417,10 +421,23 @@ else {
     const allowed = (contents, permission, origin, details = {}) => Boolean(contents && view
       && contents.id === view.webContents.id && sameOrigin(origin, target.origin)
       && details.isMainFrame !== false && ['clipboard-sanitized-write', 'fullscreen'].includes(permission));
-    hubSession.setPermissionCheckHandler((contents, permission, origin, details) =>
-      permission === 'notifications' ? Boolean(settings.notifications && contents?.id === view?.webContents.id && sameOrigin(origin, target.origin) && details.isMainFrame !== false)
-        : allowed(contents, permission, origin, details));
+    const hubFrame = (contents, origin, details = {}) => Boolean(contents && view && !contents.isDestroyed()
+      && contents.id === view.webContents.id && hubDocument(contents.getURL(), target)
+      && sameOrigin(origin, target.origin) && details.isMainFrame === true
+      && (!details.requestingUrl || hubDocument(details.requestingUrl, target)));
+    hubSession.setPermissionCheckHandler((contents, permission, origin, details) => {
+      if (permission === 'media') return hubFrame(contents, origin, details) && microphonePermission(permission, details)
+        && settings.microphoneOrigin === target.origin && settings.microphone === true;
+      return permission === 'notifications' ? Boolean(settings.notifications && contents?.id === view?.webContents.id && sameOrigin(origin, target.origin) && details.isMainFrame !== false)
+        : allowed(contents, permission, origin, details);
+    });
     hubSession.setPermissionRequestHandler(async (contents, permission, callback, details) => {
+      if (permission === 'media') {
+        const origin = details.requestingUrl || contents?.getURL();
+        if (!hubFrame(contents, origin, details) || !microphonePermission(permission, details, true)) { callback(false); return; }
+        const granted = typeof settings.microphone === 'boolean' ? settings.microphone : await requestMicrophoneConsent();
+        callback(Boolean(granted && settings.microphone === true && hubFrame(contents, origin, details))); return;
+      }
       if (permission !== 'notifications') { callback(allowed(contents, permission, details.requestingUrl || contents.getURL(), details)); return; }
       if (!contents || contents.id !== view.webContents.id || !sameOrigin(details.requestingUrl || contents.getURL(), target.origin) || details.isMainFrame === false) { callback(false); return; }
       if (typeof settings.notifications === 'boolean') { callback(settings.notifications); return; }
@@ -428,6 +445,41 @@ else {
         detail: 'Podrás recibir avisos mientras la app siga abierta, también si está minimizada.', buttons: ['Permitir', 'Ahora no'], defaultId: 0, cancelId: 1 });
       settings.notifications = result.response === 0; saveSettings(); callback(settings.notifications);
     });
+  }
+
+  async function requestMicrophoneConsent() {
+    if (microphonePrompt) return microphonePrompt;
+    const epoch = microphoneEpoch;
+    microphonePrompt = (async () => {
+      try {
+        const result = await dialog.showMessageBox(win, { type: 'question', title: 'Micrófono de Hub',
+          message: '¿Permitir el micrófono para las notas de voz?',
+          detail: `${target.origin}\n\nSolo se usa al pulsar Grabar en este Hub. No da acceso a la cámara ni a la pantalla. Puedes retirar el permiso desde el botón de micrófono de la barra superior o desde el menú.`,
+          buttons: ['Permitir micrófono', 'Ahora no'], defaultId: 1, cancelId: 1, noLink: true });
+        if (epoch !== microphoneEpoch || win.isDestroyed()) return false;
+        settings.microphone = result.response === 0; settings.microphoneOrigin = target.origin; saveSettings(); publish();
+        return settings.microphone;
+      } catch { return false; }
+      finally { microphonePrompt = null; }
+    })();
+    return microphonePrompt;
+  }
+
+  async function setMicrophone(enabled) {
+    microphoneEpoch++;
+    if (enabled) {
+      settings.microphone = null;
+      const allowed = await requestMicrophoneConsent();
+      tell(allowed ? 'Micrófono permitido solo al grabar notas de voz en este Hub.' : 'Micrófono desactivado. Puedes activarlo desde la barra superior o el menú.');
+    } else {
+      settings.microphone = false; settings.microphoneOrigin = target.origin; saveSettings(); publish();
+      // Stop an in-flight capture before its view can request another one; its
+      // local note is retained by the web draft store, not discarded on revoke.
+      if (view && !view.webContents.isDestroyed() && hubDocument(view.webContents.getURL(), target)) {
+        await view.webContents.executeJavaScript('window.HubVoice?.revokeMicrophone?.()', true).catch(() => {});
+      }
+      tell('Micrófono desactivado. Tu nota y el texto del borrador se conservan.');
+    }
   }
 
   async function downloadAction(value) {
@@ -462,6 +514,8 @@ else {
       askSave: Boolean(saved.askSave), zoom: Number.isFinite(saved.zoom) ? Math.max(.8, Math.min(1.6, saved.zoom)) : 1,
       window: saved.window, maximized: Boolean(saved.maximized),
       notifications: saved.notifications !== false,
+      microphone: saved.microphoneOrigin === target.origin && typeof saved.microphone === 'boolean' ? saved.microphone : null,
+      microphoneOrigin: target.origin,
     };
     records = restoreDownloads(readJson(historyFile, []));
     Menu.setApplicationMenu(null);
@@ -570,6 +624,7 @@ else {
           case 'attach': await attach(); break;
           case 'menu': nativeMenu(); break;
           case 'notifications': setNotifications(value); break;
+          case 'microphone': await setMicrophone(value === true); break;
           case 'notifications-test': testNotification(); break;
           case 'reload': loadHub(); break;
           case 'zoom': if ([-1, 0, 1].includes(value)) setZoom(value === 0 ? 1 : settings.zoom + value * .1); break;

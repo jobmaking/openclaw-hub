@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="activity.css?v=1">
 <link rel="stylesheet" href="interface.css?v=4">
 <link rel="stylesheet" href="queue.css?v=1">
+<link rel="stylesheet" href="voice.css?v=1">
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/hub-v2/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/icon.svg?v=2">
 <link rel="apple-touch-icon" sizes="180x180" href="/icons/hub-v2/apple-touch-icon.png">
@@ -127,11 +128,18 @@
       <div id="composer-extras" class="composer-extras">
       <div id="composer-status" class="composer-status hidden" role="status" aria-live="polite"></div>
       <div id="chips" class="chips"></div>
+      <div id="voice-draft" class="voice-draft hidden" role="region" aria-label="Borrador de nota de voz"></div>
+      <div id="voice-notice" class="voice-notice hidden" role="status" aria-live="polite"></div>
+      <div id="voice-preferences" class="voice-preferences hidden">
+        <label><input id="voice-replies" type="checkbox" checked> Responder con voz</label>
+        <span class="voice-preference-help">Solo cuando envías una nota de voz</span>
+      </div>
       </div>
       <div class="composer-row">
         <button id="btn-attach" title="Adjuntar archivo" aria-label="Adjuntar archivo"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 6-6a3 3 0 0 1 4.25 4.25l-8 8a5 5 0 0 1-7.07-7.07l8-8M7 14l7-7"/></svg></button>
         <input type="file" id="file-input" multiple hidden>
-        <textarea id="input" rows="1" placeholder="Escribe un mensaje…" aria-label="Mensaje" aria-describedby="composer-status"></textarea>
+        <button id="btn-voice" class="hidden" type="button" title="Grabar nota de voz" aria-label="Grabar nota de voz" aria-pressed="false"></button>
+        <textarea id="input" rows="1" placeholder="Escribe…" aria-label="Mensaje" aria-describedby="composer-status"></textarea>
         <button id="btn-stop" class="hidden" title="Parar respuesta y vaciar la cola" aria-label="Parar respuesta y vaciar la cola"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
         <button id="btn-send" title="Enviar" aria-label="Enviar mensaje"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
       </div>
@@ -166,6 +174,7 @@
 <script src="activity.js?v=3"></script>
 <script src="questions.js?v=3"></script>
 <script src="queue.js?v=2"></script>
-<script src="app.js?v=71"></script>
+<script src="voice.js?v=2"></script>
+<script src="app.js?v=73"></script>
 </body>
 </html>

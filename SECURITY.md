@@ -15,6 +15,11 @@ that proxy and direct access is prevented.
   and restrict user policies before giving anyone access.
 - Client-specific Internet-facing hosting profiles are not included. Setting
   `PANEL_TENANT` fails closed in this edition.
+- Optional voice audio and generated speech are stored under `data/voice/`.
+  Keep `data/` and `data/voice.json` private. The voice token and original/derived
+  audio must not be committed, published or exposed through a proxy.
+- Only configure loopback HTTP voice-service URLs. The Hub does not fall back to
+  another machine, cloud provider or public endpoint.
 
 Report vulnerabilities privately using [GitHub security advisories](https://github.com/jobmaking/openclaw-hub/security/advisories/new),
 not a public issue containing exploit details or secrets. No response-time or

@@ -1,7 +1,7 @@
 {
   "name": "openclaw-hub-desktop",
   "productName": "Hub",
-  "version": "1.0.3-community.1",
+  "version": "1.0.4-community.1",
   "private": true,
   "description": "Hub desktop for Linux, with native file transfers",
   "main": "main.cjs",
@@ -9,6 +9,7 @@
     "start": "electron .",
     "test": "node --test test/core.test.cjs test/notifications.test.cjs",
     "test:desktop": "node test/desktop-check.cjs",
+    "test:microphone": "node test/microphone-check.cjs",
     "test:notifications": "node test/notifications-check.cjs"
   },
   "dependencies": {

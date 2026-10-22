@@ -5,7 +5,19 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { hubUrl, externalUrl, sameOrigin, hubDocument, downloadLink, safeFilename, nextDownloadPath, restoreDownloads, writeJson, readJson, windowBounds } = require('../core.cjs');
+const { hubUrl, externalUrl, sameOrigin, hubDocument, microphonePermission, downloadLink, safeFilename, nextDownloadPath, restoreDownloads, writeJson, readJson, windowBounds } = require('../core.cjs');
+
+test('microphone permission never authorizes cameras, screens, unknown media or subframes', () => {
+  assert.equal(microphonePermission('media', { isMainFrame: true, mediaType: 'audio' }), true);
+  assert.equal(microphonePermission('media', { isMainFrame: true, mediaTypes: ['audio'] }, true), true);
+  for (const mediaType of ['video', 'unknown', undefined]) assert.equal(microphonePermission('media', { isMainFrame: true, mediaType }), false);
+  for (const mediaTypes of [[], ['video'], ['audio', 'video'], ['audio', 'audio'], undefined]) assert.equal(microphonePermission('media', { isMainFrame: true, mediaTypes }, true), false);
+  for (const isMainFrame of [false, undefined]) {
+    assert.equal(microphonePermission('media', { isMainFrame, mediaType: 'audio' }), false);
+    assert.equal(microphonePermission('media', { isMainFrame, mediaTypes: ['audio'] }, true), false);
+  }
+  for (const permission of ['display-capture', 'mediaKeySystem', 'camera', 'geolocation', 'unknown']) assert.equal(microphonePermission(permission, { isMainFrame: true, mediaTypes: ['audio'], mediaType: 'audio' }, true), false);
+});
 
 test('remote content cannot hand file, script or shell URLs to the desktop', () => {
   for (const value of ['file:///etc/passwd', 'javascript:alert(1)', 'data:text/html,test', 'ssh://root@host', 'vscode://file/etc/passwd', 'https://user:pass@host/', 'https://host/\ncommand']) assert.equal(externalUrl(value), null);

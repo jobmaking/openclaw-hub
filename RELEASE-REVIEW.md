@@ -33,6 +33,22 @@ License: MIT. Publication authorized by the project owner on 2026-10-19.
 - Automated native fixtures are distinct from a physical file-manager drag.
   Confirmation from the reporting Linux user remains pending.
 
+## 1.0.37 candidate review
+
+- Web 1.0.37-community.1 and optional Linux desktop 1.0.4-community.1 source.
+- Includes private voice notes, optional spoken replies and a local-only voice
+  adapter contract; no models, worker runtime or cloud fallback are included.
+- Includes the mobile one-line composer and browser cache-recovery corrections.
+- Public CI repeats the backend, artifact, question, user-isolation and paste
+  suites, including the authenticated voice-route contract, then validates
+  Compose and builds the image. Desktop unit tests run separately.
+- Acceptance of the operational release: 46/46 voice UI checks, 25/25 voice
+  route checks and 22/22 native Bu/Paco voice checks; synthetic audio and mobile
+  Chromium emulation, not a physical phone or human microphone.
+- The Linux desktop microphone consent was validated with real Electron dialogs
+  and X11 input in an isolated display; camera, screen and subframe requests are
+  denied. Physical desktop and mobile-device checks remain separate evidence.
+
 ## Limits
 
 This is a community preview, not a universal compatibility certification. No new

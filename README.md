@@ -4,7 +4,7 @@ A self-hosted web interface for your OpenClaw agents. Bring several gateways int
 one place, with streaming chat, conversation history, files and per-user access.
 
 **Independent community project. Not an official OpenClaw product.**
-This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.0.34. The interface is
+This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.0.37. The interface is
 currently Spanish-first. A running OpenClaw gateway and its model configuration
 are required; this repository does not include models, API credits or a gateway.
 
@@ -17,6 +17,7 @@ are required; this repository does not include models, API credits or a gateway.
 - Blocking and optional questions, tool approvals and reconnect recovery.
 - Uploads, previews and authorized native deliverables.
 - File drag-and-drop recovery, including the Linux desktop X11/XWayland file-drop path.
+- Optional voice notes and spoken replies using a local voice service you operate.
 - Scrypt password hashes, signed login cookies and per-user agent/conversation access.
 - Responsive layout and installable PWA; optional browser notifications.
 
@@ -75,7 +76,8 @@ use `CHROMIUM_PATH` to select a compatible browser already installed.
 
 Tests exercise the real backend against simulated local gateways: authentication,
 user/session isolation, file boundaries, native question contracts and artifacts.
-An isolated browser fixture also checks clipboard and drag-and-drop recovery.
+The voice route contract is also tested with an inert local service. An isolated
+browser fixture checks clipboard and drag-and-drop recovery.
 They do not use production credentials or call models. CI also builds the Docker
 image. Test fixture credentials and names are synthetic.
 
@@ -91,9 +93,23 @@ bash desktop/install.sh
 Open **OpenClaw HUB** in the applications menu. It connects to localhost:18900 by
 default; set your own server in its private configuration. No gateway credentials
 or saved login are bundled. Requires Node22.12+, npm and a Linux graphical desktop.
-The installer downloads the pinned Electron runtime. The desktop client (1.0.3-community.1) is optional
+The installer downloads the pinned Electron runtime. The desktop client
+(1.0.4-community.1) is optional
 and versioned separately; it does not start the server or include models.
 Full setup, features and sandbox requirements: [desktop/README.md](desktop/README.md).
+
+## Optional voice
+
+Voice is disabled unless you provide `data/voice.json` (mode `0600`) mapping each
+Hub agent to a **local** HTTP voice service. The service is not included in this
+package, and no model, API credit, cloud account or fallback is provided. Audio
+and transcripts are not sent to a model by the Hub; the configured local service
+performs STT/TTS. Keep its URL on loopback and never expose its token.
+
+See `examples/voice.example.json` and the voice section in
+[docs/INSTALL.md](docs/INSTALL.md). Without this file the microphone controls are
+not shown and no voice endpoint is probed. The Linux desktop asks for native
+microphone-only consent on first use and can revoke it from its toolbar.
 
 ## Compatibility and scope
 
@@ -102,6 +118,10 @@ was originally verified against 2026.10.3. It uses signed device handshakes and
 requests protocols 2–4. Advanced features need native APIs for sessions, artifacts,
 questions, progress and queue state. Other releases require verification; protocol
 negotiation alone does not prove feature compatibility.
+
+Voice workers, Whisper/Kokoro models and GPU runtime are not part of this export.
+The Hub only acts as an authenticated client of a service you operate. Without
+such a service, text chat, files and all other features continue to work.
 
 This export excludes operational data, repository history, client-specific public
 hosting profiles and production-only test/deploy

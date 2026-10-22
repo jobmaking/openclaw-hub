@@ -27,6 +27,7 @@
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8l-5-5ZM14 3v6h5M8 13h8M8 17h6"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 8a8 8 0 1 0 0 8M20 3v6h-6"/></symbol>
     <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></symbol>
   </svg>
 
   <header class="titlebar">
@@ -40,6 +41,7 @@
       <span class="server" id="server" title="Servidor del Hub"><svg><use href="#i-lock"/></svg><span id="server-name">Hub</span></span>
       <button class="attach-button" data-command="attach" title="Adjuntar archivos · Ctrl+O"><svg><use href="#i-attach"/></svg><span>Adjuntar</span></button>
       <button class="icon-button download-toggle" id="download-toggle" data-command="downloads" aria-label="Abrir descargas" title="Descargas · Ctrl+J" aria-expanded="false"><svg><use href="#i-download"/></svg><span id="download-count" class="count" hidden></span></button>
+      <button class="icon-button" id="microphone-toggle" data-command="microphone" aria-label="Permiso de micrófono desactivado. Pulsa para activarlo." title="Permiso de micrófono desactivado. Pulsa para activarlo." aria-pressed="false"><svg><use href="#i-mic"/></svg></button>
       <button class="icon-button" id="notification-toggle" data-command="notifications" aria-label="Notificaciones del escritorio" title="Notificaciones del escritorio" aria-pressed="true"><svg><use href="#i-bell"/></svg></button>
       <button class="icon-button" data-command="menu" aria-label="Menú de Hub" title="Menú"><svg><use href="#i-menu"/></svg></button>
     </div>
@@ -85,7 +87,7 @@
   <footer class="statusbar">
     <span class="desktop-label"><span class="desktop-dot"></span>Hub para Linux</span>
     <span id="status-message" role="status" aria-live="polite">Archivos, capturas e ideas. Todo en la conversación.</span>
-    <div class="footer-controls"><button data-command="zoom-out" aria-label="Reducir tamaño del texto" title="Reducir texto · Ctrl+−">−</button><button data-command="zoom-reset" id="zoom-value" title="Restablecer texto · Ctrl+0">100 %</button><button data-command="zoom-in" aria-label="Aumentar tamaño del texto" title="Aumentar texto · Ctrl++">+</button><span id="app-version">1.0.2</span></div>
+    <div class="footer-controls"><button data-command="zoom-out" aria-label="Reducir tamaño del texto" title="Reducir texto · Ctrl+−">−</button><button data-command="zoom-reset" id="zoom-value" title="Restablecer texto · Ctrl+0">100 %</button><button data-command="zoom-in" aria-label="Aumentar tamaño del texto" title="Aumentar texto · Ctrl++">+</button><span id="app-version">1.0.4</span></div>
   </footer>
 </body>
 </html>

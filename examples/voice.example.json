@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "nodes": {
+    "local": {
+      "url": "http://127.0.0.1:8898",
+      "token": "REPLACE_WITH_AT_LEAST_32_RANDOM_CHARACTERS",
+      "voice": "ef_dora"
+    }
+  },
+  "agents": {
+    "assistant": "local"
+  }
+}

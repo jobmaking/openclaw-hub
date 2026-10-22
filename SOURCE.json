@@ -1,7 +1,7 @@
 {
-  "sourceCommit": "e32ee25fa9964baddf799551c235108628f5b9ed",
-  "runtimeVersion": "1.0.34",
-  "desktopVersion": "1.0.3-community.1",
+  "sourceCommit": "5b9af2de7e079169e7413738b2e77326e6ca0fa0",
+  "runtimeVersion": "1.0.37",
+  "desktopVersion": "1.0.4-community.1",
   "edition": "web-and-linux-desktop",
   "historyIncluded": false
 }

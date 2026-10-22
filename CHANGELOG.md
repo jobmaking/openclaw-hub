@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.37-community.1 — voice notes and spoken replies
+
+- Add private voice notes: record, preview, transcribe and edit before sending;
+  optional spoken replies and a Listen action for written answers.
+- Route STT/TTS to the local voice service configured for each agent. No cloud
+  fallback, models or worker runtime are included; voice is disabled by default.
+- Include Linux desktop 1.0.4-community.1 with microphone-only native consent,
+  a visible revoke control and draft preservation.
+- Keep the empty mobile composer on one line with «Escribe…», including when
+  microphone and STOP controls are visible.
+- Recover voice drafts and controls after browser cache restoration without
+  reopening the microphone or replaying old answers.
+
 ## 1.0.34-community.1 — file drag-and-drop recovery
 
 - Clear the file-drop overlay after cancellation, leaving the window and dropping

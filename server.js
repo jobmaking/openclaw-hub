@@ -16,6 +16,7 @@ const { GatewayObservability, gatewayRpcError } = require('./lib/gateway-observa
 const { mountSessionBrowse } = require('./lib/session-browse');
 const { mountMessageQueue } = require('./lib/message-queue');
 const { mountArtifactRoutes } = require('./lib/artifact-routes');
+const { VoiceRoutes } = require('./lib/voice-routes');
 const { UserAccess } = require('./lib/user-access');
 const { createPublicTenant } = require('./lib/public-tenant');
 const { normalizeBlockingQuestion, blockingQuestionInScope, transcriptIdentity, readAsyncQuestion, AsyncQuestionTracker,
@@ -948,7 +949,7 @@ app.use('/api', async (req, res, next) => {
   const deny = () => res.status(403).json({ error: 'No tienes acceso a esta conversación o agente', code: 'FORBIDDEN' });
   try {
     if (['/agents', '/push-key', '/push-sub', '/upload'].includes(route)) return next();
-    const source = ['GET', 'HEAD', 'DELETE'].includes(req.method) ? req.query : (req.body || {});
+    const source = ['GET', 'HEAD', 'DELETE'].includes(req.method) || route === '/voice/transcribe' ? req.query : (req.body || {});
     if (route === '/files' && String(source.path || '').startsWith('uploads/')) {
       const id = String(source.path).slice('uploads/'.length);
       return access.canUpload(user, uploadMetadata(id)) && /^[a-zA-Z0-9_-][a-zA-Z0-9._-]{0,199}$/.test(id) ? next() : deny();
@@ -994,9 +995,12 @@ const sessionRouteOptions = { getLink, requireAuth, agents: AGENTS, normalizeCon
   searchSessionKeys: async (req, link) => access.isolationEnabled(link.id) ? (await link.sessions(true)).filter(row => access.canKnown(req.user, link, row.key)).map(row => row.key) : null,
   privateOnly: req => access.privateOnly(req.user, (['GET', 'HEAD', 'DELETE'].includes(req.method) ? req.query : req.body)?.agent),
   diagnosticFromError: (error, context) => observability.diagnostic(error, context) };
+const voice = new VoiceRoutes({ ...sessionRouteOptions, dataDir: DATA_DIR, disabled: !!publicTenant });
+sessionRouteOptions.decorateMessage = (req, link, key, message, sessionId, rawMessages) => voice.decorateMessage(req.user, link.id, key, message, sessionId, rawMessages);
 mountSessionBrowse(app, sessionRouteOptions);
 mountMessageQueue(app, sessionRouteOptions);
 mountArtifactRoutes(app, sessionRouteOptions);
+voice.mount(app);
 
 const loginFails = new Map();
 const tooMany = (ip) => {
@@ -1193,6 +1197,7 @@ app.get('/api/agents', requireAuth, (req, res) => {
         role: a.role || '',
         connected: !!l?.connected,
         fileTransport: Array.isArray(a.fileRoots) ? 'mounted' : 'gateway',
+        voiceEnabled: !!voice.node(a.id),
         error: l?.connected ? null : (l?.lastError || null),
         // Agentes con modelo fijado a propósito (decisión del dueño): sin selector
         lockedModel: !!a.lockedModel,
@@ -1539,14 +1544,15 @@ app.get('/api/history', requireAuth, async (req, res) => {
           },
         };
       }
-      const out = { ...identity, role: m.role, text, ts: m.timestamp };
+      const out = { ...identity, role: m.role, text, ts: m.timestamp,
+        ...voice.decorateMessage(req.user, l.id, String(req.query.key || ''), m, r.payload?.sessionId, r.payload?.messages || []) };
       const question = readAsyncQuestion(m);
       if (question) out.asyncQuestion = asyncQuestionForTranscript(asyncQuestions.get(question.itemId) || question, r.payload?.sessionId, currentSessionId);
       if (tools.length) out.tools = tools;
       if (m.role === 'assistant' && (m.errorMessage || m.stopReason === 'error')) out.diagnostic = observability.diagnostic(m, { at: m.timestamp, terminal: true });
       return out;
     }).filter(m => m.text || (m.tools && m.tools.length) || m.tool || m.diagnostic || m.asyncQuestion || m.role === 'user');
-    res.json({ messages });
+    res.json({ messages, sessionId: r.payload?.sessionId || null });
   } catch (e) { apiError(res, e, 'La operación no se pudo completar'); }
 });
 
@@ -1920,6 +1926,7 @@ function publishChatEvent(agentId, p) {
   if (!p || !p.sessionKey || p.isHeartbeat === true) return;
   const activity = observability.ingest(agentId, 'chat', p);
   if (activity.duplicate) return;
+  voice.observeFinal(agentId, p);
   if (p.state === 'status') {
     broadcast({ type: 'phase', agentId, sessionKey: p.sessionKey, runId: p.runId,
       phase: p.phase, ...(p.retry ? { retry: p.retry } : {}), ...(Number.isSafeInteger(p.seq) ? { seq: p.seq } : {}),
@@ -1937,6 +1944,9 @@ function publishChatEvent(agentId, p) {
     broadcast({
       type: p.state, agentId, sessionKey: p.sessionKey, runId: p.runId,
       text: text || undefined,
+      ...(typeof p.sessionId === 'string' && p.sessionId.length <= 512 ? { sessionId: p.sessionId } : {}),
+      ...(transcriptIdentity(p.message).id || typeof p.messageId === 'string' && p.messageId.length <= 512
+        ? { messageId: transcriptIdentity(p.message).id || p.messageId } : {}),
       errorMessage: p.errorMessage ? observability.safeText(p.errorMessage) : activity.diagnostic?.message,
       ...(activity.diagnostic ? { diagnostic: activity.diagnostic } : {}),
       ...(p.errorKind ? { errorKind: p.errorKind } : {}),
@@ -2204,13 +2214,19 @@ wss.on('connection', (ws, req) => {
           });
         }
         ws.agentId = agentId;
+        const idempotencyKey = access.namespaced(u, agentId, JSON.stringify([key, clientMessageId]), 'send');
+        const voiceNote = await voice.prepareSend(u, l, key, m.voiceNoteId, idempotencyKey);
         const r = await l.req('chat.send', {
           sessionKey: key, message: text,
           attachments: atts.length ? atts : undefined,
-          idempotencyKey: access.namespaced(u, agentId, JSON.stringify([key, clientMessageId]), 'send'),
+          idempotencyKey,
         }, 20000);
-        if (!r.ok) throw gatewayRpcError(r, 'fallo al enviar');
+        if (!r.ok) {
+          voice.rejectSend(voiceNote, idempotencyKey);
+          throw gatewayRpcError(r, 'fallo al enviar');
+        }
         const runId = r.payload?.runId || null;
+        voice.commitSend(voiceNote, runId);
         l.ensureSub(key);
         browserSend(ws, { type: 'send_accepted', ...response, runId }, true);
       } catch (e) {

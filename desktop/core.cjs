@@ -32,6 +32,14 @@ function hubDocument(value, target) {
   } catch { return false; }
 }
 
+// A media permission is never a general camera/screen grant. Electron supplies
+// different detail shapes for a permission check and the actual request.
+function microphonePermission(permission, details = {}, request = false) {
+  if (permission !== 'media' || details.isMainFrame !== true) return false;
+  return request ? Array.isArray(details.mediaTypes) && details.mediaTypes.length === 1 && details.mediaTypes[0] === 'audio'
+    : details.mediaType === 'audio';
+}
+
 function downloadLink(value, target) {
   const base = target instanceof URL ? target : new URL(target);
   const normalized = externalUrl(value);
@@ -103,4 +111,4 @@ function windowBounds(saved, displays) {
   return bounds;
 }
 
-module.exports = { hubUrl, externalUrl, sameOrigin, hubDocument, downloadLink, safeFilename, nextDownloadPath, readJson, writeJson, restoreDownloads, windowBounds };
+module.exports = { hubUrl, externalUrl, sameOrigin, hubDocument, microphonePermission, downloadLink, safeFilename, nextDownloadPath, readJson, writeJson, restoreDownloads, windowBounds };

@@ -50,6 +50,33 @@ no self-service signup, password recovery or SSO.
 User isolation covers Hub routes, not the agent's underlying memory, tools or
 workspace. A shared agent can still access its own shared resources.
 
+## Optional local voice
+
+The voice UI is off until `data/voice.json` exists (mode `0600`). It is a JSON
+document with `version: 1`, a `nodes` map and an `agents` map:
+
+```json
+{
+  "version": 1,
+  "nodes": {
+    "local": {
+      "url": "http://127.0.0.1:8898",
+      "token": "REPLACE_WITH_AT_LEAST_32_RANDOM_CHARACTERS",
+      "voice": "ef_dora"
+    }
+  },
+  "agents": { "assistant": "local" }
+}
+```
+
+`url` must be loopback HTTP. The referenced service must implement
+`GET /health` → `{available,stt,tts}`, `POST /transcribe` with audio bytes →
+`{text,duration,language?}`, and `POST /speech` with `{text,voice}` → MP3. The
+service, Whisper/Kokoro models and GPU runtime are **not included**. Do not
+publish the token or expose the voice port. An unconfigured agent gets no voice
+controls and never falls back to another node. Keep `data/voice/` private with the
+rest of `data/`.
+
 ## Node.js without Docker
 
 Node 22 is the baseline. Follow the same `data/` setup and gateway editing in the

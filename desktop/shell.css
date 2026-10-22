@@ -29,6 +29,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .download-toggle { position: relative; }
 .download-toggle[aria-expanded="true"] { background: #bdbbff16; color: var(--accent); }
 #notification-toggle[aria-pressed="true"] { color: var(--green); }
+#microphone-toggle { width: 44px; height: 44px; }
+#microphone-toggle[aria-pressed="true"] { color: var(--green); background: #93d8b90c; }
 #notification-toggle[data-status="error"], #notification-toggle[data-status="incompatible"] { color: #e9c385; }
 .count { position: absolute; top: -1px; right: -1px; height: 16px; min-width: 16px; padding: 0 4px; display: grid; place-items: center; border-radius: 8px; font-size: 9px; font-weight: 700; color: #211d40; background: var(--accent); border: 2px solid #1b1e26; }
 .window-controls { display: flex; align-self: stretch; border-left: 1px solid var(--border); -webkit-app-region: no-drag; }
