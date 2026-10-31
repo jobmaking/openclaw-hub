@@ -995,7 +995,7 @@ const sessionRouteOptions = { getLink, requireAuth, agents: AGENTS, normalizeCon
   searchSessionKeys: async (req, link) => access.isolationEnabled(link.id) ? (await link.sessions(true)).filter(row => access.canKnown(req.user, link, row.key)).map(row => row.key) : null,
   privateOnly: req => access.privateOnly(req.user, (['GET', 'HEAD', 'DELETE'].includes(req.method) ? req.query : req.body)?.agent),
   diagnosticFromError: (error, context) => observability.diagnostic(error, context) };
-const voice = new VoiceRoutes({ ...sessionRouteOptions, dataDir: DATA_DIR, disabled: !!publicTenant });
+const voice = new VoiceRoutes({ ...sessionRouteOptions, dataDir: DATA_DIR });
 sessionRouteOptions.decorateMessage = (req, link, key, message, sessionId, rawMessages) => voice.decorateMessage(req.user, link.id, key, message, sessionId, rawMessages);
 mountSessionBrowse(app, sessionRouteOptions);
 mountMessageQueue(app, sessionRouteOptions);
@@ -1343,6 +1343,7 @@ app.get('/api/sessions', requireAuth, async (req, res) => {
     }));
     const isMain = (x) => x.kind === 'session' || (x.kind === 'subagent' && nestedInPanel(x));
     const own = info.filter(isMain);
+    const central = [];
     const others = info.filter(x => !isMain(x));
     // Profundidad visible: cuántos ancestros están en la vista (0 = raíz)
     const visibleDepth = (x) => {
@@ -1351,7 +1352,8 @@ app.get('/api/sessions', requireAuth, async (req, res) => {
       return d;
     };
     const cutoff = visibilityCutoffMs();
-    const wantKind = String(req.query.kind || 'session') === 'others' ? others : own;
+    const requestedKind = String(req.query.kind || 'session');
+    const wantKind = requestedKind === 'others' ? others : requestedKind === 'central' ? central : own;
     const sorted = [...wantKind].sort((a, b) => ((b.r.pinned ? 1 : 0) - (a.r.pinned ? 1 : 0)) || (activityAt(b.r) - activityAt(a.r)));
     // Un hijo cuenta en el día de su sesión del panel: si no, el árbol se parte entre dos
     // grupos de día y la indentación deja de entenderse.
@@ -1381,6 +1383,7 @@ app.get('/api/sessions', requireAuth, async (req, res) => {
       hiddenCount: hiddenByDate,
       othersCount: others.length,
       ownCount: own.length,
+      centralCount: central.length,
       counts: info.reduce((acc, x) => { acc[x.kind] = (acc[x.kind] || 0) + 1; return acc; }, {}),
       sessions: page.map(({ r, kind, chain }) => {
         const par = chain[0] && !chain[0].missing ? chain[0] : null;

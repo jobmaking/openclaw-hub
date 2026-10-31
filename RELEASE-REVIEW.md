@@ -3,6 +3,16 @@
 Repository: https://github.com/jobmaking/openclaw-hub
 License: MIT. Publication authorized by the project owner on 2026-10-19.
 
+## 1.1.1 candidate review
+
+- Consolidates the conversation controls into one accessible expandable panel
+  on desktop and mobile; no view actions remain at the bottom of the tree.
+- Excludes the operational Central tab and its backend partition. Community
+  users keep all authorized sessions in the general list.
+- Candidate checks must cover collapsed and expanded desktop/mobile layouts,
+  search and view switching, the complete exported backend suites, Compose,
+  image build and public CI for the exact release SHA.
+
 ## Reviewed scope
 
 - Fresh public history; no operational repository history, users, data or credentials.

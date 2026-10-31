@@ -282,7 +282,9 @@
 
   function speechKey(owner, message) { return JSON.stringify([owner.user, owner.agent, owner.key, owner.sessionId, message.id]); }
   function speechNotice(result) {
-    return [result.truncated ? 'Audio parcial · respuesta completa en texto' : '', result.omittedCode ? 'El código está en el texto' : ''].filter(Boolean).join(' · ');
+    return [result.historyTruncated ? 'Audio parcial · mensaje truncado en el historial'
+      : result.truncated ? 'Audio parcial · respuesta completa en texto' : '',
+      result.omittedCode ? 'El código está en el texto' : ''].filter(Boolean).join(' · ');
   }
   function renderMessage(slot) {
     const entry = metadata.get(slot); if (!entry || !slot.isConnected && slot.dataset.ready) return;

@@ -29,10 +29,18 @@ const users = [{ u: 'alice', name: 'Alice', pw, legacyStorageOwner: true },
     ...(mixed ? { sessionScope: 'shared', sessionScopes: { assistant: 'own' } } : { sessionScope: 'own' }) }];
 fs.writeFileSync(path.join(data, 'users.json'), JSON.stringify(users));
 const old = 'agent:main:dashboard:alice-private';
+const central = 'agent:main:dashboard:central-email';
+const centralChild = 'agent:main:subagent:central-child';
+const centralNamedDevelopment = 'agent:main:subagent:central-development';
 const makeRow = (key, extra = {}) => ({ key, agentId: 'main', sessionId: 'sid-' + key,
   classification: 'direct', createdVia: 'gateway', label: key === old ? 'PRIVATE-ALICE-LABEL' : 'Own conversation',
   updatedAt: Date.now(), hasActiveRun: false, modelProvider: 'fixture', model: 'inert', ...extra });
-const rows = new Map([[old, makeRow(old)]]), creations = new Map();
+const rows = new Map([
+  [old, makeRow(old)],
+  [central, makeRow(central, { label: 'Central · correo · Fixture' })],
+  [centralChild, makeRow(centralChild, { classification: 'subagent', spawnDepth: 1, parentSessionKey: central, label: 'Central child' })],
+  [centralNamedDevelopment, makeRow(centralNamedDevelopment, { classification: 'subagent', spawnDepth: 1, parentSessionKey: old, label: 'Central · pulido responsive' })],
+]), creations = new Map();
 // One native Gateway serves both Gael (main) and Ploti. Both links deliberately
 // receive its full roster and event stream, so only the real Hub can separate it.
 const firstLegacy = 'agent:main:dashboard:first-legacy';
@@ -150,6 +158,13 @@ try {
     assert.deepEqual(bob.sessions.map(s => s.key), [own]);
     const alice = await (await api(cookieAlice, '/api/sessions', { agent: 'assistant', fresh: '1' })).json();
     assert.ok(alice.sessions.some(s => s.key === old)); assert.ok(!alice.sessions.some(s => s.key === own));
+  });
+  await check('Community edition keeps every authorized conversation in the general view', async () => {
+    const general = await (await api(cookieAlice, '/api/sessions', { agent: 'assistant', all: '1', fresh: '1' })).json();
+    assert.ok(general.sessions.some(s => s.key === central && s.key !== centralChild));
+    assert.ok(general.sessions.some(s => s.key === centralChild));
+    assert.ok(general.sessions.some(s => s.key === centralNamedDevelopment));
+    assert.equal(general.centralCount, 0);
   });
   const blocked = [
     ['GET', '/api/sessions', { agent: 'bu' }], ['POST', '/api/sessions', { agent: 'bu' }],

@@ -51,9 +51,19 @@
     <div id="agent-strip" class="agent-strip"></div>
 
     <div class="sessions-wrap">
-      <div class="sessions-heading">Conversaciones</div>
-      <input id="s-filter" class="s-filter hidden" type="search" placeholder="Buscar sesión…" aria-label="Buscar entre las sesiones cargadas" autocomplete="off" autocorrect="off" spellcheck="false">
-      <div id="sessions-notice" class="sessions-notice hidden" role="alert"></div>
+      <div class="sessions-heading sessions-heading-static">Conversaciones</div>
+      <button id="session-tabs-toggle" class="sessions-heading session-tabs-toggle" type="button" aria-expanded="false" aria-controls="conversation-controls">
+        <span>Conversaciones · <strong id="session-view-current">HUB</strong></span><span class="session-tabs-chevron" aria-hidden="true">▸</span>
+      </button>
+      <div id="conversation-controls" class="conversation-controls">
+        <div class="session-view-actions" role="group" aria-label="Vista de la lista de conversaciones">
+          <button id="btn-session-others" type="button" aria-pressed="false">Otras</button>
+          <button id="btn-session-sort" type="button">Por días</button>
+          <button id="btn-session-archive" type="button" class="hidden">Anteriores</button>
+        </div>
+        <input id="s-filter" class="s-filter hidden" type="search" placeholder="Buscar sesión…" aria-label="Buscar entre las sesiones cargadas" autocomplete="off" autocorrect="off" spellcheck="false">
+        <div id="sessions-notice" class="sessions-notice hidden" role="alert"></div>
+      </div>
       <div id="session-list" class="session-list"></div>
     </div>
 
@@ -174,7 +184,7 @@
 <script src="activity.js?v=3"></script>
 <script src="questions.js?v=3"></script>
 <script src="queue.js?v=2"></script>
-<script src="voice.js?v=2"></script>
+<script src="voice.js?v=3"></script>
 <script src="app.js?v=73"></script>
 </body>
 </html>

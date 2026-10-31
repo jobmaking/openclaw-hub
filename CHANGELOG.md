@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1-community.1 — 2026-10-31
+
+- Consolidated conversation navigation on desktop and mobile. One expandable
+  panel groups Other sessions, ordering, older conversations and search,
+  leaving the session list clear by default.
+- The internal Central origin selector is not included. Every authorized
+  conversation remains available in the community edition's general view.
+
 ## 1.0.37-community.1 — voice notes and spoken replies
 
 - Add private voice notes: record, preview, transcribe and edit before sending;

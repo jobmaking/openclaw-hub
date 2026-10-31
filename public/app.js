@@ -20,6 +20,7 @@ const state = {
   pendingFiles: [],
   showAll: false,
   showOthers: false,      // ver cron/subagentes/canal en vez de las sesiones propias
+  sessionView: 'general', // 'general' | 'central': raíces creadas por la app Central
   filter: '',             // texto del buscador del panel lateral
   collapsed: {},         // "parentKey" -> false cuando el usuario lo ha desplegado; por defecto, plegado
   sortMode: (() => { try { return localStorage.getItem('hub.sort') || 'dia'; } catch { return 'dia'; } })(),   // 'dia' | 'recientes'
@@ -29,6 +30,7 @@ const state = {
   hiddenCount: 0,
   othersCount: 0,
   ownCount: 0,
+  centralCount: 0,
   ws: null,
   streamBubble: null,
   streamText: '',
@@ -422,6 +424,8 @@ async function selectAgent(id, restoreKey = null) {
   renderSessionsNotice();
   state.showAll = false;
   state.showOthers = false;
+  state.sessionView = 'general';
+  renderSessionTabs();
   state.filter = '';
   sessionSearchVersion++;
   sessionSearchState = { agent: id, query: '', results: [], loading: false, error: null };
@@ -450,6 +454,14 @@ async function selectAgent(id, restoreKey = null) {
     // A live refresh may invalidate the first list before it fills the view.
     // Restore only after the newest read, without erasing the remembered chat.
     listRead = sessionListOperation;
+  }
+  // Un aviso o la última posición pueden apuntar a una sesión de Central.
+  // Si no está en la vista general, abrir su pestaña antes de elegir otra.
+  if (restoreKey && !state.sessions.some(s => s.key === restoreKey) && state.centralCount > 0) {
+    state.sessionView = 'central';
+    renderSessionTabs();
+    await loadSessions();
+    if (navigationVersion !== chatNavigationVersion || state.agent !== id) return;
   }
   // La sesión recordada puede no estar en la lista (borrada, o filtrada): se cae
   // a la primera si existe, y si no, se queda vacío como antes.
@@ -900,7 +912,8 @@ async function readSessionList() {
   const settingsEpoch = modelSettingsEpoch;
   const settingsReadVersion = ++modelSettingsReadSequence;
   const url = `/api/sessions?agent=${encodeURIComponent(state.agent)}`
-    + (state.showAll ? '&all=1' : '') + (state.showOthers ? '&kind=others' : '');
+    + (state.showAll ? '&all=1' : '')
+    + (state.showOthers ? '&kind=others' : state.sessionView === 'central' ? '&kind=central' : '');
   const r = await hubFetch(url).then(r => r.json()).catch(() => null);
   if (agentId !== state.agent || listVersion !== sessionListVersion) return;
   if (!r || r.error || !Array.isArray(r.sessions)) {
@@ -923,6 +936,8 @@ async function readSessionList() {
   state.hiddenCount = r.hiddenCount || 0;
   state.othersCount = r.othersCount || 0;
   state.ownCount = r.ownCount || 0;
+  state.centralCount = r.centralCount || 0;
+  renderSessionTabs();
   // Si la sesión actual está fallada, actualizar la barra de estado
   if (state.current) {
     const cur = state.sessions.find(s => s.key === state.current);
@@ -940,6 +955,91 @@ async function readSessionList() {
   renderModels();
   reconcileRuns();   // el gateway ya dijo quién tiene turno activo: ajustar la barra
 }
+
+function renderSessionTabs() {
+  for (const [view, id] of [['general', 'hub'], ['central', 'central']]) {
+    const button = $('tab-' + id);
+    if (!button) continue;
+    const selected = state.sessionView === view;
+    button.setAttribute('aria-selected', String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  }
+  const hubCount = $('tab-hub-count');
+  const centralCount = $('tab-central-count');
+  if (hubCount) hubCount.textContent = state.ownCount ? String(state.ownCount) : '';
+  if (centralCount) centralCount.textContent = state.centralCount ? String(state.centralCount) : '';
+  const current = $('session-view-current');
+  if (current) current.textContent = state.showOthers ? 'Otras' : state.sessionView === 'central' ? 'Central' : 'HUB';
+}
+
+function renderSessionViewControls() {
+  const others = $('btn-session-others');
+  others.classList.toggle('hidden', !state.othersCount && !state.showOthers);
+  others.textContent = state.showOthers ? 'Volver a sesiones' : `Otras (${state.othersCount})`;
+  others.setAttribute('aria-pressed', String(state.showOthers));
+  const sort = $('btn-session-sort');
+  sort.classList.toggle('hidden', state.showOthers || !state.sessions.length);
+  const recent = state.sortMode === 'recientes';
+  sort.textContent = recent ? 'Recientes' : 'Por días';
+  sort.title = recent ? 'Actividad más reciente primero' : 'Conversaciones agrupadas por días';
+  sort.setAttribute('aria-pressed', String(recent));
+  const archive = $('btn-session-archive');
+  archive.classList.toggle('hidden', state.showOthers || !state.showAll && !state.hiddenCount);
+  archive.textContent = state.showAll ? 'Solo hoy' : `Anteriores (${state.hiddenCount})`;
+  archive.setAttribute('aria-pressed', String(state.showAll));
+}
+
+function collapseSessionTabs() {
+  $('session-tabs-toggle')?.setAttribute('aria-expanded', 'false');
+}
+
+function setSessionView(view) {
+  if (!['general', 'central'].includes(view)) return;
+  if (view === 'central' && !$('tab-central')) return;
+  if (state.sessionView === view && !state.showOthers) return;
+  state.sessionView = view;
+  state.showOthers = false;
+  state.showAll = false;
+  state.filter = '';
+  sessionSearchVersion++;
+  sessionSearchState = { agent: state.agent, query: '', results: [], loading: false, error: null };
+  renderSessionSearch();
+  renderSessionTabs();
+  collapseSessionTabs();
+  loadSessions();
+}
+
+$('session-tabs-toggle').addEventListener('click', () => {
+  const button = $('session-tabs-toggle');
+  button.setAttribute('aria-expanded', String(button.getAttribute('aria-expanded') !== 'true'));
+});
+
+$('tab-hub')?.addEventListener('click', () => setSessionView('general'));
+$('tab-central')?.addEventListener('click', () => setSessionView('central'));
+for (const [view, id] of [['general', 'hub'], ['central', 'central']]) {
+  $('tab-' + id)?.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    event.preventDefault();
+    const next = view === 'general' ? 'central' : 'general';
+    setSessionView(next);
+    $('tab-' + (next === 'general' ? 'hub' : 'central')).focus();
+  });
+}
+
+$('btn-session-others').addEventListener('click', () => {
+  state.showOthers = !state.showOthers;
+  renderSessionTabs();
+  loadSessions();
+});
+$('btn-session-sort').addEventListener('click', () => {
+  state.sortMode = state.sortMode === 'recientes' ? 'dia' : 'recientes';
+  try { localStorage.setItem('hub.sort', state.sortMode); } catch {}
+  renderSessions();
+});
+$('btn-session-archive').addEventListener('click', () => {
+  state.showAll = !state.showAll;
+  loadSessions();
+});
 
 function renderSessionsNotice() {
   const notice = $('sessions-notice');
@@ -1415,41 +1515,7 @@ function renderSessions() {
   }
   renderSessionSearch();
 
-  // Fila de controles
-  const ctrl = document.createElement('div');
-  ctrl.className = 's-ctrl';
-  if (state.showOthers) {
-    ctrl.innerHTML = '<span class="s-other">Cron, subagentes y otras apps</span>';
-  } else if (state.showAll || state.hiddenCount > 0) {
-    const t = document.createElement('button');
-    t.className = 'archive-toggle';
-    t.textContent = state.showAll ? '‹ Ver solo las de hoy' : `🗄 Anteriores (${state.hiddenCount})`;
-    t.addEventListener('click', () => { state.showAll = !state.showAll; loadSessions(); });
-    ctrl.appendChild(t);
-  }
-  if (state.othersCount) {
-    const o = document.createElement('button');
-    o.className = 'archive-toggle';
-    o.textContent = state.showOthers ? '‹ Volver a las sesiones' : `⚙ Otras (${state.othersCount})`;
-    o.title = 'Sesiones de cron, subagentes, canales y otras apps';
-    o.addEventListener('click', () => { state.showOthers = !state.showOthers; loadSessions(); });
-    ctrl.appendChild(o);
-  }
-  // Orden: por días (agrupado, como siempre) o por recientes (todo arriba, sin grupos)
-  if (!state.showOthers && state.sessions.length) {
-    const ord = document.createElement('button');
-    ord.className = 'archive-toggle';
-    const flat = state.sortMode === 'recientes';
-    ord.textContent = flat ? '↑ Recientes' : '🗓 Por días';
-    ord.title = flat ? 'Todo ordenado por actividad más reciente' : 'Agrupado por días (como ahora)';
-    ord.addEventListener('click', () => {
-      state.sortMode = flat ? 'dia' : 'recientes';
-      try { localStorage.setItem('hub.sort', state.sortMode); } catch {}
-      renderSessions();
-    });
-    ctrl.appendChild(ord);
-  }
-  if (ctrl.children.length) el.appendChild(ctrl);
+  renderSessionViewControls();
 
   if (!rows.length) {
     const hint = document.createElement('div');
@@ -1464,6 +1530,9 @@ $('btn-new').addEventListener('click', createSession);
 
 async function createSession() {
   if (!state.agent || newSessionPending) return;
+  // Una sesión manual pertenece al HUB: las de Central necesitan el contexto
+  // de un mensaje y se crean desde esa aplicación.
+  if (state.sessionView !== 'general') { state.sessionView = 'general'; renderSessionTabs(); }
   const agent = state.agent, navigation = chatNavigationVersion;
   saveDraft();
   const operation = { agent, id: newSessionRetries.get(agent) || newClientId() };
