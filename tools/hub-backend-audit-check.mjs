@@ -32,7 +32,7 @@ const browserClients = new Set();
 const results = [];
 const extraBackends = new Set();
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-let abortBehavior = 'normal';
+let abortBehavior = 'normal', activeRunIds = [];
 let backend;
 let backendLogs = '';
 let cookie;
@@ -106,7 +106,7 @@ gateway.on('connection', socket => {
       case 'sessions.describe': return reply({ session: row });
       case 'sessions.preview': return reply({ previews: [] });
       case 'sessions.messages.subscribe': return reply({ subscriptionId: 'inert-audit' });
-      case 'chat.history': return reply({ messages: [] });
+      case 'chat.history': return reply({ messages: [], sessionInfo: { hasActiveRun: activeRunIds.length > 0, activeRunIds } });
       case 'chat.send': {
         if (params.message === 'inert rejection fixture') return reply(null, { code: 'INVALID_REQUEST', message: 'Fixture rejected the message' });
         // Emulate the Gateway's durable idempotency contract, without executing anything.
@@ -428,25 +428,27 @@ try {
     assert.equal(frames[1].seq, 4);
   });
 
-  await check('STOP clears lifecycle queues through sessions.abort', async () => {
+  await check('STOP preserves native followup queues through sessions.abort', async () => {
     const offset = requests.length;
-    const result = await stopAndResult('normal', 'audit-stop');
+    activeRunIds = ['active-original'];
+    let result;
+    try { result = await stopAndResult('normal', 'audit-stop'); } finally { activeRunIds = []; }
     const request = requests.slice(offset).find(item => ['chat.abort', 'sessions.abort'].includes(item.method));
     assert.ok(request, 'Stop RPC was sent');
-    assert.deepEqual({ method: request.method, key: request.params.key ?? null, clearQueued: request.params.clearQueued ?? null },
-      { method: 'sessions.abort', key, clearQueued: true },
-      'chat.abort lacks the followup/lane lifecycle cleanup promised by STOP');
+    assert.deepEqual({ method: request.method, key: request.params.key ?? null, runId: request.params.runId ?? null, clearQueued: request.params.clearQueued ?? null },
+      { method: 'sessions.abort', key, runId: 'active-original', clearQueued: false },
+      'STOP must not discard followup inputs');
     assert.equal(result.ok, true);
-    assert.equal(result.queueCleared, true);
+    assert.equal(result.queueCleared, false);
   });
 
-  await check('old Gateway fallback reports incomplete queue cleanup', async () => {
+  await check('old Gateway fallback does not confirm followup preservation', async () => {
     const offset = requests.length;
     const result = await stopAndResult('unsupported', 'audit-stop-legacy');
     assert.deepEqual(requests.slice(offset).filter(item => item.method.endsWith('.abort')).map(item => item.method), ['sessions.abort', 'chat.abort']);
-    assert.equal(result.ok, true);
+    assert.equal(result.ok, true, JSON.stringify(result));
     assert.equal(result.queueCleared, false);
-    assert.ok(result.warning, 'legacy Stop must not claim the lifecycle queues were cleared');
+    assert.ok(result.warning, 'legacy Stop must not confirm followup preservation');
   });
 
   for (const behavior of ['denied', 'invalid', 'unavailable', 'timeout']) await check('Stop ' + behavior + ' is surfaced without a legacy fallback', async () => {

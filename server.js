@@ -14,7 +14,7 @@ const WebSocket = require('ws');
 const multer = require('multer');
 const { GatewayObservability, gatewayRpcError } = require('./lib/gateway-observability');
 const { mountSessionBrowse } = require('./lib/session-browse');
-const { mountMessageQueue } = require('./lib/message-queue');
+const { mountMessageQueue, readMessageQueue } = require('./lib/message-queue');
 const { mountArtifactRoutes } = require('./lib/artifact-routes');
 const { VoiceRoutes } = require('./lib/voice-routes');
 const { UserAccess } = require('./lib/user-access');
@@ -2252,15 +2252,53 @@ wss.on('connection', (ws, req) => {
         if (!await access.authorize(u, l, key)) throw Object.assign(new Error('No tienes acceso a esta conversación o agente'), { code: 'FORBIDDEN' });
         if (!key) throw new Error('falta la sesión');
         if (m.requestId != null && !requestId) throw new Error('requestId inválido');
-        let result = await l.req('sessions.abort', { key, clearQueued: true }, 15000);
-        let queueCleared = result.ok === true;
+        // Detener el run exacto evita interrumpir también los follow-ups.
+        // Si no hay un único run confirmado, clearQueued:false los conserva.
+        let activeRunId = null;
+        let waitingBefore = [];
+        try {
+          const current = await l.req('chat.history', { sessionKey: key, agentId: l.cfg.gatewayAgentId || 'main', limit: 1 }, 10000);
+          const ids = current.payload?.sessionInfo?.activeRunIds;
+          if (current.ok && Array.isArray(ids) && ids.length === 1 && typeof ids[0] === 'string') activeRunId = ids[0];
+          const before = await readMessageQueue(l, key, { normalizeContent, includeSource: true });
+          waitingBefore = before.items.filter(item => item.queued).map(item => ({
+            ...item, source: before.sourceItems?.find(source => source.id === item.id),
+          }));
+        } catch {}
+        // STOP cancela el turno actual, no los mensajes que el usuario puso
+        // después. OpenClaw conserva y continúa esos follow-ups con false.
+        let result = await l.req('sessions.abort', { key, clearQueued: false, ...(activeRunId ? { runId: activeRunId } : {}) }, 15000);
+        let queueCleared = false;
         let warning;
         if (unsupportedMethod(result, 'sessions.abort')) {
           result = await l.req('chat.abort', { sessionKey: key }, 15000);
           queueCleared = false;
-          warning = 'Este gateway solo permite detener el turno; no se ha confirmado la limpieza de la cola';
+          warning = 'Este gateway solo permite detener el turno; la conservación de la cola no está confirmada';
         }
         if (!result.ok) throw gatewayRpcError(result, 'No se pudo detener el turno');
+        // Algunos gateways interrumpen (no reanudan) los follow-ups incluso
+        // con STOP exacto. Reactiva solo los que no fueron consumidos, con una
+        // idempotencia estable por entrada; si ya arrancaron, no hace nada.
+        if (waitingBefore.length) {
+          const after = await readMessageQueue(l, key, { normalizeContent,
+            runIds: waitingBefore.map(item => item.runId).filter(Boolean) });
+          if (after.available && after.hasActiveRun === false && after.queuedCount === 0) {
+            for (const item of waitingBefore) {
+              const receipt = after.inputReceipts.find(entry => entry.runId === item.runId);
+              if (receipt?.state === 'consumed') continue;
+              const content = item.source?.message?.content;
+              const attachments = (Array.isArray(content) ? content : []).filter(block =>
+                ['image', 'file'].includes(block?.type) && typeof block.content === 'string')
+                .slice(0, 6).map(block => ({ type: block.type, mimeType: block.mimeType,
+                  fileName: block.fileName, content: block.content }));
+              const idempotencyKey = crypto.createHash('sha256')
+                .update('hub-stop-resume-v1|' + key + '|' + (item.runId || item.id)).digest('hex');
+              const resumed = await l.req('chat.send', { sessionKey: key, message: normalizeContent(content).text || item.text,
+                ...(attachments.length ? { attachments } : {}), idempotencyKey }, 20000);
+              if (!resumed.ok) throw gatewayRpcError(resumed, 'No se pudo reanudar el mensaje en espera');
+            }
+          }
+        }
         browserSend(ws, { ...response, ok: true, queueCleared, aborted: result.payload?.aborted === true, ...(warning ? { warning } : {}) }, true);
       } catch (error) {
         const diagnostic = l && access.canKnown(u, l, key)

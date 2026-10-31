@@ -3,7 +3,7 @@
 Repository: https://github.com/jobmaking/openclaw-hub
 License: MIT. Publication authorized by the project owner on 2026-10-19.
 
-## 1.1.2 candidate review
+## 1.1.5 candidate review
 
 - Consolidates the conversation controls into one accessible expandable panel
   on desktop and mobile; no view actions remain at the bottom of the tree.

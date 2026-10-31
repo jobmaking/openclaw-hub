@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.2-community.1 — 2026-10-31
+## 1.1.5-community.1 — 2026-10-31
 
 - Consolidated conversation navigation on desktop and mobile. One expandable
   panel groups Other sessions, ordering, older conversations and search,
@@ -8,6 +8,12 @@
 - The internal Central origin selector is not included. Every authorized
   conversation remains available in the community edition's general view.
 - Compact view controls stay on one row, including on narrow mobile screens.
+- Stop cancels only the active response. Queued follow-ups are preserved and
+  can start next; Stop confirmation recognizes the new run taking over.
+- The active run ID scopes Stop precisely, preventing session-wide
+  cancellation from interrupting the preserved follow-up.
+- Interrupted follow-ups are resumed idempotently only when native receipts
+  confirm they were not consumed; started or completed work is never replayed.
 
 ## 1.0.37-community.1 — voice notes and spoken replies
 

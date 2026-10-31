@@ -211,6 +211,7 @@
         || !!(snapshot?.hasMore && snapshot.queuedCountExact === false);
     },
     isActive(agent, key) { const value = entries.get(keyOf(agent, key)); return !value?.stale && !value?.error && value?.snapshot?.hasActiveRun === true; },
+    activeRunIds(agent, key) { const value = entries.get(keyOf(agent, key)); return !value?.stale && !value?.error && Array.isArray(value?.snapshot?.activeRunIds) ? [...value.snapshot.activeRunIds] : []; },
     latestAdmission(agent, key) { return entries.get(keyOf(agent, key))?.lastAdmission || null; },
     depth(agent, key) { const value = entries.get(keyOf(agent, key)); return value && !value.stale && !value.error ? value.snapshot?.queuedCount ?? null : null; },
     async verifyTerminal(message) {

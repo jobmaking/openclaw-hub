@@ -2491,7 +2491,7 @@ function finishStop(job, error) {
   if (stopPending.get(scope) !== job) return false;
   clearTimeout(job.timer);
   stopPending.delete(scope);
-  const text = error || 'Parada confirmada; turno inactivo y cola vacía';
+  const text = error || 'Parada confirmada; los mensajes en espera se conservan';
   sendNotices.set(scope, { text, error: !!error });
   if (state.agent === job.agentId && state.current === job.key) {
     toast(text); updateComposerState(); renderModels();
@@ -2502,8 +2502,18 @@ function settleStopFromSnapshot(agentId, key, snapshot, observation) {
   const job = stopPending.get(rk(agentId, key));
   if (!job?.acknowledged || !Number.isFinite(observation?.requestedAt)
       || observation.requestedAt < job.acknowledgedAt || snapshot.available !== true
-      || snapshot.hasActiveRun !== false || snapshot.queuedCount !== 0
+      || snapshot.queuedCount !== 0
       || snapshot.items?.some(item => item.state === 'queued') || pendingSends.has(rk(agentId, key))) return false;
+  // Con la cola conservada, el siguiente run puede estar activo. Solo se
+  // confirma STOP cuando está inactivo todo o cuando un run distinto de los
+  // presentes al pulsar ya ha tomado el relevo; el turno original sigue
+  // activo no cuenta como confirmación.
+  if (snapshot.hasActiveRun !== false) {
+    const previous = new Set(job.activeRunIds || []);
+    const followupStarted = Array.isArray(snapshot.activeRunIds)
+      && snapshot.activeRunIds.some(runId => !previous.has(runId));
+    if (!followupStarted) return false;
+  }
   return finishStop(job);
 }
 function handleStopResult(message) {
@@ -2538,11 +2548,11 @@ function updateComposerState() {
   $('input').disabled = question;
   $('btn-stop').classList.toggle('hidden', !stopping && !state.running && !window.HubQueue?.hasPending(state.agent, state.current));
   $('btn-stop').disabled = offline || stopping;
-  $('btn-stop').title = stopping ? 'Deteniendo; esperando turno inactivo y cola vacía' : 'Parar respuesta y vaciar la cola';
+  $('btn-stop').title = stopping ? 'Deteniendo la respuesta actual; la cola se conserva' : 'Parar respuesta actual sin borrar los mensajes en espera';
   document.querySelectorAll('#chips .x').forEach(button => { button.disabled = pending; });
   window.HubVoice?.setLocked(pending || stopping || question || state.historyLoading || !!modelSettingsPending || !!uploading || !state.current);
   const notice = sendNotices.get(scope);
-  const text = stopping ? 'Deteniendo… Esperando confirmar el turno inactivo y la cola vacía.'
+  const text = stopping ? 'Deteniendo la respuesta actual… Los mensajes en espera se conservan.'
     : pending ? 'Enviando… El borrador está protegido hasta confirmar.'
     : uploading ? 'Subiendo ' + uploading + (uploading === 1 ? ' archivo…' : ' archivos…')
     : notice?.text || (offline && state.current ? 'Sin conexión. Tu borrador se conserva.' : '');
@@ -2689,7 +2699,8 @@ $('btn-stop').addEventListener('click', () => {
   if (!state.current || state.ws?.readyState !== WebSocket.OPEN) { toast('Sin conexión: no se ha confirmado la parada'); return; }
   const scope = rk(state.agent, state.current);
   if (stopPending.has(scope)) return;
-  const job = { agentId: state.agent, key: state.current, requestId: newClientId(), at: Date.now(), acknowledged: false };
+  const job = { agentId: state.agent, key: state.current, requestId: newClientId(), at: Date.now(), acknowledged: false,
+    activeRunIds: window.HubQueue?.activeRunIds(state.agent, state.current) || [] };
   stopPending.set(scope, job); updateComposerState(); renderModels();
   job.timer = setTimeout(() => finishStop(job, 'La parada aún no está confirmada. Puedes volver a pulsar STOP; tu borrador se conserva.'), 20000);
   try { state.ws.send(JSON.stringify({ type: 'abort', agentId: job.agentId, sessionKey: job.key, requestId: job.requestId })); }
