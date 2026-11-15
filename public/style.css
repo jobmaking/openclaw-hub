@@ -114,6 +114,7 @@ body.resizing * { cursor: col-resize !important; }
   border-bottom: 1px solid var(--border);
 }
 .agent-chip {
+  position: relative;
   display: flex; align-items: center; gap: 6px;
   padding: 6px 10px; border-radius: 999px; font-size: 13px;
   background: var(--bg3); border: 1px solid var(--border); color: var(--text);
@@ -123,6 +124,16 @@ body.resizing * { cursor: col-resize !important; }
 .agent-chip.active { background: var(--accent2); border-color: var(--accent); font-weight: 600; }
 .agent-chip.off { opacity: .45; }
 .agent-chip.off .a-name::after { content: " \2022"; color: var(--danger); }
+.agent-chip .a-busy {
+  position: absolute; top: -3px; left: -3px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 0 rgba(79,140,255,.6);
+  animation: agent-pulse 1.6s ease-out infinite;
+}
+@keyframes agent-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(79,140,255,.6); }
+  70% { box-shadow: 0 0 0 6px rgba(79,140,255,0); }
+  100% { box-shadow: 0 0 0 0 rgba(79,140,255,0); }
+}
 
 .session-list { flex: 1; padding: 8px; }
 .session-item {
@@ -172,6 +183,20 @@ body.resizing * { cursor: col-resize !important; }
 }
 .session-item .s-dot.on { background: var(--accent); }
 .session-item .s-ask { color: var(--warn); }
+.session-item .s-state {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  padding: 0 6px; border: 1px solid transparent; border-radius: 999px;
+  font-size: 10px; font-weight: 600; line-height: 1.6; white-space: nowrap;
+}
+.session-item .s-state.running { color: #a9c7ff; background: rgba(79,140,255,.16); border-color: rgba(79,140,255,.35); }
+.session-item .s-state.waiting,
+.session-item .s-state.aborted { color: #f0c45a; background: rgba(210,153,34,.16); border-color: rgba(210,153,34,.35); }
+.session-item .s-state.done { color: #7ee2a8; background: rgba(63,185,80,.14); border-color: rgba(63,185,80,.32); }
+.session-item .s-state.error { color: #ff9b93; background: rgba(229,83,75,.16); border-color: rgba(229,83,75,.38); }
+.session-item .s-state .s-state-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+  animation: blink 1.2s infinite;
+}
 /* de qué va la sesión: sin esto, varios "Sin título" son indistinguibles */
 .session-item .s-sub {
   font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

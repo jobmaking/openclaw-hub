@@ -36,7 +36,7 @@ async function until(label, read, maximum = 12000) {
 const events = () => { try { return JSON.parse(fs.readFileSync(journal, 'utf8')); } catch { return []; } };
 const notices = () => events().filter(event => event.event === 'notify');
 const closed = id => events().some(event => event.event === 'closed' && event.id === id);
-const agents = [{ id: 'bu', name: 'Bu', emoji: '🛡️', connected: true, models: [] }, { id: 'lex', name: 'Lex', emoji: '⚖️', connected: true, models: [] }];
+const agents = [{ id: 'assistant', name: 'Assistant', emoji: '🤖', connected: true, models: [] }, { id: 'second', name: 'Second', emoji: '🤖', connected: true, models: [] }];
 const fixture = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://fixture');
   requests.push({ method: request.method, path: url.pathname });
@@ -134,7 +134,7 @@ async function reload() {
     check('the desktop has no horizontal overflow with its notification control', await local.evaluate('document.documentElement.scrollWidth===innerWidth'));
     broadcast(question('q-1'));
     const first = await native('q-1');
-    check('a question from another agent and conversation produces a native notification', first.title.includes('Lex te pregunta') && first.body.includes('q-1'));
+    check('a question from another agent and conversation produces a native notification', first.title.includes('Second te pregunta') && first.body.includes('q-1'));
     const count = notices().length; broadcast(question('q-1')); await sleep(1300);
     check('repeated question events do not duplicate native notices', notices().length === count);
     await remote.evaluate('document.getElementById("input").value="Borrador Linux intacto";document.getElementById("input").dispatchEvent(new Event("input",{bubbles:true}))');
@@ -146,14 +146,14 @@ async function reload() {
     check('opening another agent from a notice preserves the unsent draft', await remote.evaluate('document.getElementById("input").value==="Borrador Linux intacto"'));
     broadcast(question('q-1', { phase: 'resolved', status: 'answered' }));
     await sleep(1200);
-    const approval = { type: 'approval', agentId: 'bu', sessionKey: 'chat-a', id: 'a-1', phase: 'pending', status: 'pending', title: 'Permiso Linux', allowed: ['allow-once', 'deny'] };
+    const approval = { type: 'approval', agentId: 'assistant', sessionKey: 'chat-a', id: 'a-1', phase: 'pending', status: 'pending', title: 'Permiso Linux', allowed: ['allow-once', 'deny'] };
     await local.evaluate('hubDesktop.command("minimize")');
     broadcast(approval);
     const permission = await native('Permiso Linux');
     check('a permission requested while minimized reaches Linux', permission.title.includes('pide permiso') && await local.evaluate('state.minimized'));
     activate(permission.id); await until('permission notice restores app', () => local.evaluate('!state.minimized && state.focused'));
     check('opening a permission does not erase the current composer', await remote.evaluate('document.getElementById("input").value==="Borrador Linux intacto"'));
-    const optional = { type: 'async_question', agentId: 'bu', sessionKey: 'chat-a', asyncQuestion: { itemId: 'optional-1', sourceSessionId: 'fixture-bu-chat-a',
+    const optional = { type: 'async_question', agentId: 'assistant', sessionKey: 'chat-a', asyncQuestion: { itemId: 'optional-1', sourceSessionId: 'fixture-bu-chat-a',
       sourceMessageId: 'message-1', answerable: true, answered: false, questions: [{ title: 'Pregunta opcional Linux', options: ['A', 'B'] }] } };
     broadcast(optional);
     const optionalNotice = await native('Pregunta opcional Linux');

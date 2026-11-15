@@ -19,6 +19,7 @@ const { mountArtifactRoutes } = require('./lib/artifact-routes');
 const { VoiceRoutes } = require('./lib/voice-routes');
 const { UserAccess } = require('./lib/user-access');
 const { createPublicTenant } = require('./lib/public-tenant');
+const { mountSkillReview, SKILL_REVIEW_ROUTES } = require('./lib/skill-review');
 const { normalizeBlockingQuestion, blockingQuestionInScope, transcriptIdentity, readAsyncQuestion, AsyncQuestionTracker,
   historyAsyncQuestions, eventQuestionMessage, asyncQuestionForTranscript } = require('./lib/agent-questions');
 
@@ -495,6 +496,10 @@ class AgentLink {
       this.pending.clear();
       if (!this.settingsOnly) {
         observability.setConnection(this.id, false, error);
+        if (agentBusy.get(this.id) !== 0) {
+          agentBusy.set(this.id, 0);
+          broadcast({ type: 'agent_activity', agentId: this.id });
+        }
         broadcast({ type: 'agent', agentId: this.id, connected: false, diagnostic: observability.diagnostic(error, { terminal: false }) });
       }
       setTimeout(() => this.connect(), this.backoff);
@@ -570,6 +575,7 @@ class AgentLink {
       onApprovalEvent(this.id, m.payload);
     } else if (m.type === 'event' && m.event === 'sessions.changed') {
       this.sessionsCache.at = 0;
+      scheduleActivityRefresh(this.id);
       const key = m.payload?.sessionKey, owner = this.cfg.gatewayAgentId || 'main';
       const lifecycle = typeof key === 'string' && (!m.payload.agentId || m.payload.agentId === owner)
         && ['reset', 'new', 'delete'].includes(m.payload.reason);
@@ -648,6 +654,7 @@ class AgentLink {
     this.activityRefreshedAt.clear();
     observability.setConnection(this.id, true);
     broadcast({ type: 'agent', agentId: this.id, connected: true });
+    scheduleActivityRefresh(this.id, 800);
     // Native chat.send sends full tool results only to tool-events recipients;
     // other turns use the sessions.subscribe registry, not messages.subscribe.
     if (!publicTenant && (!this.gatewayMethods || this.gatewayMethods.has('sessions.subscribe'))) {
@@ -748,6 +755,33 @@ for (const cfg of AGENTS) {
 }
 const getLink = (id) => links.get(String(id || ''));
 
+// Estado "trabajando" por agente para el listado del HUB. No se inventa a
+// partir de eventos efímeros: la fuente es sessions.list (hasActiveRun), igual
+// que la barra de la conversación. Se refresca al cambiar una sesión o al
+// empezar/terminar un turno, y tiene una red de seguridad de 30 s.
+const agentBusy = new Map();
+const activityRefreshTimers = new Map();
+function scheduleActivityRefresh(agentId, delay = 1200) {
+  if (!agentId || activityRefreshTimers.has(agentId)) return;
+  const timer = setTimeout(() => {
+    activityRefreshTimers.delete(agentId);
+    refreshAgentActivity(agentId).catch(() => {});
+  }, delay);
+  timer.unref?.();
+  activityRefreshTimers.set(agentId, timer);
+}
+async function refreshAgentActivity(agentId) {
+  const link = getLink(agentId);
+  if (!link || !link.connected) return;
+  let rows;
+  try { rows = await link.sessions(); } catch { return; }
+  const working = rows.filter(row => row?.hasActiveRun).length;
+  const previous = agentBusy.has(agentId) ? agentBusy.get(agentId) : -1;
+  if (previous === working) return;
+  agentBusy.set(agentId, working);
+  broadcast({ type: 'agent_activity', agentId });
+}
+
 // Refresco periódico de aprobaciones pendientes: una que nazca en una sesión que nadie
 // tiene abierta (o mientras el panel estaba caído) tiene que acabar viéndose igual.
 setInterval(() => {
@@ -756,6 +790,14 @@ setInterval(() => {
     l.pullQuestions().catch(() => {});
   }
 }, 45 * 1000).unref?.();
+
+// Red de seguridad del indicador de actividad. La fuente sigue siendo el
+// gateway; esto solo evita que un evento perdido deje un punto encendido o
+// apagado para siempre. Sin navegadores conectados no consulta a nadie.
+setInterval(() => {
+  if (!browsers.size) return;
+  for (const l of links.values()) if (l.connected) scheduleActivityRefresh(l.id, 0);
+}, 30 * 1000).unref?.();
 
 // ---------------------------------------------------------------------------
 // Web Push (VAPID): la notificación llega al SO aunque la PWA esté CERRADA.
@@ -957,6 +999,7 @@ app.use('/api', async (req, res, next) => {
     const link = getLink(source.agent);
     if (!link) return access.privateOnly(user) ? deny() : res.status(400).json({ error: 'agente desconocido' });
     if (!access.canAgent(user, link.id)) return deny();
+    if (SKILL_REVIEW_ROUTES.has(route)) return !publicTenant && access.canReviewSkills(user, link.id) ? next() : deny();
     if (route === '/files' && !access.privateOnly(user, link.id) && !source.key) return next();
     if ((route === '/sessions' && ['GET', 'HEAD', 'POST'].includes(req.method)) || route === '/session-search') return next();
     if (route === '/question') {
@@ -1001,6 +1044,7 @@ mountSessionBrowse(app, sessionRouteOptions);
 mountMessageQueue(app, sessionRouteOptions);
 mountArtifactRoutes(app, sessionRouteOptions);
 voice.mount(app);
+mountSkillReview(app, { getLink, access, publicTenant, originAllowed: browserOriginAllowed });
 
 const loginFails = new Map();
 const tooMany = (ip) => {
@@ -1192,12 +1236,21 @@ app.get('/api/agents', requireAuth, (req, res) => {
   res.json({
     agents: AGENTS.filter(a => access.canAgent(req.user, a.id)).map(a => {
       const l = getLink(a.id);
+      const rows = l?.sessionsCache?.rows || [];
+      // Un contador agregado nunca debe revelar sesiones de otra cuenta con
+      // ámbito privado: se cuenta solo lo que este usuario puede conocer.
+      const working = l?.connected
+        ? rows.filter(row => row?.hasActiveRun && access.canKnown(req.user, l, row.key)).length
+        : 0;
+      if (l?.connected && !agentBusy.has(a.id)) scheduleActivityRefresh(a.id, 0);
       return {
         id: a.id, name: a.name || a.id, emoji: a.emoji || '🤖',
         role: a.role || '',
         connected: !!l?.connected,
+        working,
         fileTransport: Array.isArray(a.fileRoots) ? 'mounted' : 'gateway',
         voiceEnabled: !!voice.node(a.id),
+        ...(!publicTenant ? { skillsReviewEnabled: access.canReviewSkills(req.user, a.id) } : {}),
         error: l?.connected ? null : (l?.lastError || null),
         // Agentes con modelo fijado a propósito (decisión del dueño): sin selector
         lockedModel: !!a.lockedModel,
@@ -1671,7 +1724,7 @@ function confinedFile(root, target) {
 
 // Busca un fichero por nombre dentro de una raíz (recursivo, acotado).
 // `name` puede ser un nombre exacto o una COLA (el gateway trunca con `…` y solo
-// conserva el final del nombre, p.ej. "ones-CANometro-...pdf").
+// conserva el final del nombre, p.ej. "ones-report-...pdf").
 function findByBasename(root, name) {
   const want = name.toLowerCase();
   const stack = [root];
@@ -1893,6 +1946,9 @@ function unsupportedMethod(result, method) {
 
 function broadcast(msg) {
   for (const browser of browsers) {
+    if (msg.type === 'activity' && msg.sessionKey
+        && !(browser.watched && browser.watched.has(msg.sessionKey))) continue;
+    if (msg.type === 'agent_activity' && msg.agentId && !access.canAgent(browser.user, msg.agentId)) continue;
     const deliver = () => msg.type === 'async_question' ? sendAsyncQuestion(browser, msg) : browserSend(browser, msg);
     if (msg.sessionKey && !messageAllowed(browser.user, msg)) {
       access.authorize(browser.user, getLink(msg.agentId), msg.sessionKey).then(allowed => { if (allowed) deliver(); }).catch(() => {});
@@ -1930,6 +1986,10 @@ function publishChatEvent(agentId, p) {
   const activity = observability.ingest(agentId, 'chat', p);
   if (activity.duplicate) return;
   voice.observeFinal(agentId, p);
+  // El primer delta/status ya anuncia un turno: refrescar el punto del agente
+  // sin esperar al cierre. El temporizador por agente evita consultas en cada
+  // token; la caché de sessions() limita el resto.
+  scheduleActivityRefresh(agentId, 1500);
   if (p.state === 'status') {
     broadcast({ type: 'phase', agentId, sessionKey: p.sessionKey, runId: p.runId,
       phase: p.phase, ...(p.retry ? { retry: p.retry } : {}), ...(Number.isSafeInteger(p.seq) ? { seq: p.seq } : {}),
@@ -2024,6 +2084,7 @@ function onAgentEvent(agentId, p) {
     });
   } else if (p.stream === 'run_status') {
     if (!d.phase) return;
+    scheduleActivityRefresh(agentId, 1500);
     broadcast({ ...base, type: 'phase', phase: String(d.phase), ...(d.phase === 'retrying' ? { retry: { attempt: d.attempt, maxAttempts: d.maxAttempts, reason: d.reason, retryAfterMs: d.retryAfterMs } } : {}) });
   } else if (p.stream === 'usage') {
     if (d.outputTokens == null) return;
@@ -2238,6 +2299,8 @@ wss.on('connection', (ws, req) => {
     } else if (m.type === 'watch') {
       // El navegador abre una sesión (o vuelve a ella): suscribir para ver herramientas.
       if (l && await access.authorize(u, l, key)) {
+        (ws.watched ||= new Set()).add(key);
+        while (ws.watched.size > 20) ws.watched.delete(ws.watched.values().next().value);
         const connection = l.ws;
         l.ensureSub(key).then(authorized => {
           if (authorized) return l.replayAsyncQuestionsToBrowser(ws, key, connection);

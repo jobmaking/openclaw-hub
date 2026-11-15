@@ -13,6 +13,22 @@ License: MIT. Publication authorized by the project owner on 2026-10-19.
   search and view switching, the complete exported backend suites, Compose,
   image build and public CI for the exact release SHA.
 
+## 1.3.0 candidate review
+
+- Web 1.3.0-community.1 and optional Linux desktop 1.0.4-community.1 source.
+- Includes live per-session and per-agent working status, optional Workshop
+  skill review for explicitly authorized operators, and the mobile proposal
+  navigation. Nothing is applied automatically; the Central selector remains
+  out of the community edition and every authorized session stays in the
+  general view.
+- Local candidate results: exported web suites all pass (94/94 backend audit,
+  29/29 artifact routes, 61/61 question contract, 25/25 user isolation, the
+  paste browser suite reports TODO OK, and 25/25 voice contract); desktop unit
+  tests 18/18; Compose validation and the isolated image build pass.
+- Public CI for the exact release SHA and the anonymous release download remain
+  required. The operational Hub live acceptance covered the working row and
+  agent dot; no operational screenshots or data are included here.
+
 ## Reviewed scope
 
 - Fresh public history; no operational repository history, users, data or credentials.
@@ -53,7 +69,7 @@ License: MIT. Publication authorized by the project owner on 2026-10-19.
   suites, including the authenticated voice-route contract, then validates
   Compose and builds the image. Desktop unit tests run separately.
 - Acceptance of the operational release: 46/46 voice UI checks, 25/25 voice
-  route checks and 22/22 native Bu/Paco voice checks; synthetic audio and mobile
+  route checks and 22/22 native agent voice checks; synthetic audio and mobile
   Chromium emulation, not a physical phone or human microphone.
 - The Linux desktop microphone consent was validated with real Electron dialogs
   and X11 input in an isolated display; camera, screen and subframe requests are

@@ -41,7 +41,7 @@ const rows = new Map([
   [centralChild, makeRow(centralChild, { classification: 'subagent', spawnDepth: 1, parentSessionKey: central, label: 'Central child' })],
   [centralNamedDevelopment, makeRow(centralNamedDevelopment, { classification: 'subagent', spawnDepth: 1, parentSessionKey: old, label: 'Central · pulido responsive' })],
 ]), creations = new Map();
-// One native Gateway serves both Gael (main) and Ploti. Both links deliberately
+// One native Gateway serves both First (main) and Second. Both links deliberately
 // receive its full roster and event stream, so only the real Hub can separate it.
 const firstLegacy = 'agent:main:dashboard:first-legacy';
 const secondLegacy = 'agent:second:dashboard:second-legacy';
@@ -372,10 +372,10 @@ try {
     access.claim('private', link, own); assert.equal(access.canKnown('team-a', link, own), false);
     assert.equal(access.canKnown('private', link, old), false); assert.equal(access.canUpload('private', { owner: 'team-a' }), false);
   });
-  if (mixed) await check('Mixed scope keeps Gael history and new sessions shared without weakening Assistant', async () => {
+  if (mixed) await check('Mixed scope keeps First history and new sessions shared without weakening Assistant', async () => {
     const legacy = await (await api(cookieBob, '/api/sessions', { agent: 'first', fresh: '1' })).json();
     assert.ok(legacy.sessions.some(session => session.key === firstLegacy));
-    const response = await api(cookieBob, '/api/sessions', { agent: 'first', label: 'Shared Gael conversation' }, 'POST');
+    const response = await api(cookieBob, '/api/sessions', { agent: 'first', label: 'Shared First conversation' }, 'POST');
     assert.equal(response.status, 200); const key = (await response.json()).key;
     assert.equal((await api(cookieAlice, '/api/history', { agent: 'first', key })).status, 200);
     const registry = JSON.parse(fs.readFileSync(path.join(data, 'session-owners.json')));

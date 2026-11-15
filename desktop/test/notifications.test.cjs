@@ -6,8 +6,8 @@ const { EventEmitter } = require('node:events');
 const vm = require('node:vm');
 const { snapshotScript, openScript, pendingItems, HubNotifications } = require('../notifications.cjs');
 
-const item = (changes = {}) => ({ kind: 'question', id: 'q-1', agentId: 'bu', sessionKey: 'chat-a',
-  agentName: 'Bu', summary: '¿Qué opción prefieres?', phase: 'pending', status: 'pending', ...changes });
+const item = (changes = {}) => ({ kind: 'question', id: 'q-1', agentId: 'assistant', sessionKey: 'chat-a',
+  agentName: 'Assistant', summary: '¿Qué opción prefieres?', phase: 'pending', status: 'pending', ...changes });
 const snapshot = (items = [item()], user = 'test-user') => ({ status: 'ready', user, items });
 function fixture() {
   const shown = [], opened = [], states = [], failures = [];
@@ -73,7 +73,7 @@ test('account changes close notices and keep deduplication and click identities 
 
 test('notification content is bounded, plain text and cannot contain terminal controls or body markup', () => {
   const { center, shown } = fixture();
-  center.sync(snapshot([item({ summary: '<a href="file:///private">Texto</a>\u0000\u202e' + 'x'.repeat(500), agentName: 'Bu\n\u202e' })]));
+  center.sync(snapshot([item({ summary: '<a href="file:///private">Texto</a>\u0000\u202e' + 'x'.repeat(500), agentName: 'Assistant\n\u202e' })]));
   assert.equal(shown.length, 1);
   assert.ok(!shown[0].options.body.includes('<a'));
   assert.ok(shown[0].options.body.startsWith('&lt;a'));

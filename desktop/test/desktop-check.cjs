@@ -149,8 +149,8 @@ async function setupChat() {
   await guest.evaluate(`(async () => {
     document.getElementById('login-view').classList.add('hidden'); document.getElementById('app').classList.remove('hidden');
     document.getElementById('composer').classList.remove('hidden');
-    state.user = 'desktop-test'; state.agent = 'bu'; state.current = 'root'; state.pendingFiles = [];
-    state.agents = [{id:'bu',name:'Bu',emoji:'🛡️',connected:false,role:'Builder'}];
+    state.user = 'desktop-test'; state.agent = 'assistant'; state.current = 'root'; state.pendingFiles = [];
+    state.agents = [{id:'assistant',name:'Assistant',emoji:'🤖',connected:false,role:'Assistant'}];
     renderAgents(); renderChips(); updateComposerState();
     document.getElementById('chat-title').textContent = 'Prueba de archivos';
     await loadSessions(); await selectSession('root');

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0-community.1 — 2026-11-15
+
+- Show whether an agent is working without opening a conversation: each session
+  row carries a live Working indicator, Waiting when a question needs an answer,
+  and Ready/Stopped/Error after the turn closes. Agent tabs get a live activity
+  dot while any of that agent's turns is active.
+- The indicator is backed by the gateway's native `hasActiveRun` truth and
+  session/chat events, with a bounded safety refresh. It is not a local timer.
+- Add optional Workshop skill review for explicitly authorized operators:
+  inspect complete instructions, comparison and files before accepting or
+  rejecting the exact revision. Nothing is applied automatically, and a changed
+  installed skill blocks an update until it is reviewed again.
+- On mobile, selecting a skill proposal opens its detail; Back to pending keeps
+  the inbox within reach. Desktop keeps the side-by-side review layout.
+
 ## 1.1.5-community.1 — 2026-10-31
 
 - Consolidated conversation navigation on desktop and mobile. One expandable

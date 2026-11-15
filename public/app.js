@@ -15,6 +15,8 @@ const state = {
   current: null,          // session key
   running: false,
   runningByKey: {},       // "agentId|sessionKey" -> bool
+  agentBusy: {},          // agentId -> nº de turnos activos conocidos por el gateway
+  finishedByKey: {},      // "agentId|sessionKey" -> {at,type} para el "Listo" reciente
   runSinceByKey: {},      // "agentId|sessionKey" -> ts del lanzamiento (para no apagar un turno recien lanzado)
   lastEventByKey: {},     // "agentId|sessionKey" -> ts de la ultima senal recibida del gateway
   pendingFiles: [],
@@ -129,6 +131,37 @@ function isObservedIdle(agentId, key, observed = window.HubActivity?.status(agen
 const isRunning = (s) => !!s && !isObservedIdle(state.agent, s.key) && !!(state.runningByKey[rk(state.agent, s.key)] || s.hasActiveRun);
 // Una sesión falló en su último turno: mostrar indicador de error
 const isFailed = (s) => s ? !!s.lastRunFailed : false;
+const FINISHED_TTL_MS = 10 * 60 * 1000;
+
+// Estado visible en la fila, sin abrir la conversación. "Trabajando" sale del
+// gateway (hasActiveRun/eventos); "Listo/Detenido/Error" es el último cierre
+// visto en esta pestaña, durante unos minutos, para no tener que adivinar si
+// el turno terminó o nunca llegó a arrancar.
+function sessionStatusChip(s, questions) {
+  if (questions) {
+    const chip = document.createElement('span');
+    chip.className = 's-state waiting';
+    chip.textContent = 'Esperando';
+    chip.title = questions + ' pregunta' + (questions === 1 ? '' : 's') + ' esperando respuesta';
+    return chip;
+  }
+  if (isRunning(s)) {
+    const chip = document.createElement('span');
+    chip.className = 's-state running';
+    const dot = document.createElement('i');
+    dot.className = 's-state-dot';
+    chip.append(dot, document.createTextNode('Trabajando'));
+    chip.title = 'El agente está trabajando en esta sesión';
+    return chip;
+  }
+  const done = state.finishedByKey[rk(state.agent, s.key)];
+  if (!done || Date.now() - done.at > FINISHED_TTL_MS) return null;
+  const chip = document.createElement('span');
+  chip.className = 's-state ' + (done.type === 'error' ? 'error' : done.type === 'aborted' ? 'aborted' : 'done');
+  chip.textContent = done.type === 'error' ? 'Error' : done.type === 'aborted' ? 'Detenido' : 'Listo';
+  chip.title = 'Último turno: ' + chip.textContent.toLowerCase() + ' · ' + fmtDate(done.at);
+  return chip;
+}
 
 window.HubQueue?.configure({
   request: hubFetch, user: () => state.user,
@@ -366,10 +399,27 @@ function cleanDrafts() {
 // ---------------------------------------------------------------------------
 // Agentes
 // ---------------------------------------------------------------------------
+let agentsReloadTimer = null;
+function scheduleAgentsReload() {
+  if (agentsReloadTimer) return;
+  agentsReloadTimer = setTimeout(() => {
+    agentsReloadTimer = null;
+    loadAgents().catch(() => {});
+  }, 400);
+}
+
 async function loadAgents() {
   const r = await hubFetch('/api/agents').then(r => r.json()).catch(() => null);
   if (!r || !r.agents) return;
   state.agents = r.agents;
+  const busy = Object.fromEntries(r.agents.map(a => [a.id, Math.max(0, Number(a.working) || 0)]));
+  // Un envío/turno local recién arrancado no espera a que sessions.list lo
+  // confirme para conservar su punto; el servidor manda en cuanto responde.
+  for (const [scope, on] of Object.entries(state.runningByKey)) {
+    if (on) busy[scope.split('|')[0]] = Math.max(busy[scope.split('|')[0]] || 0, 1);
+  }
+  state.agentBusy = busy;
+  window.HubSkillReview?.refresh();
   // A private account's filtered catalog is not a dedicated single-agent panel.
   // Keep its agent visible, especially in the empty mobile navigation drawer.
   state.singleAgent = r.agents.length === 1 && (state.sessionScopes[r.agents[0].id] || state.sessionScope) !== 'own';
@@ -391,8 +441,17 @@ function renderAgents() {
     d.className = 'agent-chip' + (a.id === state.agent ? ' active' : '') + (a.connected ? '' : ' off');
     d.dataset.agentId = a.id;
     d.setAttribute('aria-pressed', String(a.id === state.agent));
-    d.title = a.connected ? `${a.name} — ${a.role || ''}` : `${a.name} — sin conexión${a.error ? ': ' + a.error : ''}`;
+    const busy = a.connected && (state.agentBusy[a.id] || 0) > 0;
+    d.title = a.connected ? `${a.name} — ${a.role || ''}${busy ? ' · trabajando' : ''}` : `${a.name} — sin conexión${a.error ? ': ' + a.error : ''}`;
     d.innerHTML = `<span class="a-emoji">${a.emoji || '🤖'}</span><span class="a-name">${esc(a.name)}</span>`;
+    if (busy) {
+      d.classList.add('busy');
+      const live = document.createElement('span');
+      live.className = 'a-busy';
+      live.setAttribute('aria-label', 'Trabajando');
+      live.title = 'Trabajando';
+      d.appendChild(live);
+    }
     const pending = questionAttentionItems().filter(item => item.agentId === a.id).length;
     if (pending) {
       const badge = document.createElement('span'); badge.className = 'a-pending'; badge.textContent = String(pending);
@@ -415,6 +474,7 @@ async function selectAgent(id, restoreKey = null) {
   // Al cambiar de agente, volver a la última sesión que abriste con él.
   if (!restoreKey && id !== state.agent) restoreKey = lastByAgent[id] || null;
   state.agent = id;
+  window.HubSkillReview?.refresh();
   reportedFailed.clear();   // cambiar de agente: resetear notificaciones de fallo
   state.current = null;
   state.historyLoading = false;
@@ -639,6 +699,7 @@ function connectWs() {
       invalidateAsyncSessionQuestions(m);
       if (!m.agentId || m.agentId === state.agent) loadSessions();
     }
+    else if (m.type === 'agent_activity') scheduleAgentsReload();
     else if (m.type === 'models' || m.type === 'agent') loadAgents();
     else if (m.type === 'delta') onDelta(m);
     else if (m.type === 'tool') onToolEvent(m);
@@ -1387,8 +1448,7 @@ function renderSessions() {
       qm.title = nAsk + ' pregunta' + (nAsk === 1 ? '' : 's') + ' esperando respuesta';
       label.appendChild(qm);
     }
-    label.appendChild(document.createTextNode(
-      (isRunning(s) && !nAsk ? '⏳ ' : '') + sessionTitle(s)));
+    label.appendChild(document.createTextNode(sessionTitle(s)));
     main.appendChild(label);
     const sub = String(s.snippet || '').trim();
     const subEl = document.createElement('span');
@@ -1416,6 +1476,8 @@ function renderSessions() {
     if (subEl.textContent) main.appendChild(subEl);
     const meta = document.createElement('span');
     meta.className = 's-meta';
+    const statusChip = sessionStatusChip(s, nAsk);
+    if (statusChip) meta.appendChild(statusChip);
     main.appendChild(meta);
     // Columna de árbol (slot fijo en todas las filas: la columna del título no baila)
     const tw = document.createElement('span');
@@ -2211,6 +2273,9 @@ function onTerminal(m) {
   if (m.agentId === state.agent && m.sessionKey === state.current && RUN.runId && m.runId && RUN.runId !== m.runId) return;
   window.HubVoice?.terminal(m);
   const rkey = rk(m.agentId, m.sessionKey);
+  // Deja constancia del cierre en la lista (aunque la sesión no esté abierta)
+  // para que "Trabajando" se convierta en "Listo/Detenido/Error" sin abrirla.
+  state.finishedByKey[rkey] = { at: Date.now(), type: m.type };
   const isCurrent = () => m.agentId === state.agent && m.sessionKey === state.current;
   if (m.type === 'error') {
     // Native chat:error is terminal. Retried provider/tool errors arrive as
@@ -2322,7 +2387,13 @@ function setRunning(agentId, key, on) {
   const k = rk(agentId, key);
   const changed = state.runningByKey[k] !== on;
   state.runningByKey[k] = on;
-  if (on) { if (!state.runSinceByKey[k]) state.runSinceByKey[k] = Date.now(); }
+  if (on) {
+    if (!state.runSinceByKey[k]) state.runSinceByKey[k] = Date.now();
+    delete state.finishedByKey[k];
+    // El punto del agente aparece al instante al enviar; el gateway confirma o
+    // corrige el contador después con agent_activity.
+    if ((state.agentBusy[agentId] || 0) < 1) { state.agentBusy[agentId] = 1; renderAgents(); }
+  }
   else { delete state.runSinceByKey[k]; delete state.lastEventByKey[k]; }
   if (agentId === state.agent && key === state.current && (changed || state.running !== on)) setRunningUI(on);
   if (changed) renderSessions();
@@ -2371,6 +2442,11 @@ async function reconcileRuns() {
 // estado del gateway cada 20 s (loadSessions termina llamando a reconcileRuns).
 setInterval(() => {
   if (document.hidden) return;
+  let pruned = false;
+  for (const [k, done] of Object.entries(state.finishedByKey)) {
+    if (Date.now() - done.at > FINISHED_TTL_MS) { delete state.finishedByKey[k]; pruned = true; }
+  }
+  if (pruned) renderSessions();
   if (!Object.values(state.runningByKey).some(Boolean)) return;
   loadSessions();
 }, 20000);
