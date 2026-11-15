@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.1-community.1 — 2026-11-15
+
+- Opening a conversation now acknowledges its read state through the native
+  `sessions.patch { unread: false }` contract with `expectedMarkedUnreadAt`.
+  The unread dot clears when the conversation is read, while a newer manual
+  unread marker from another client is preserved.
+- Only the open conversation's automatic unread state is acknowledged here;
+  a manual marker remains until the conversation is reopened.
+
 ## 1.3.0-community.1 — 2026-11-15
 
 - Show whether an agent is working without opening a conversation: each session

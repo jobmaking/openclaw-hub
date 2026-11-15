@@ -966,6 +966,39 @@ function loadSessions() {
   return operation;
 }
 
+const unreadAcks = new Map();
+// Lectura automática de la sesión abierta. El gateway decide si la marca sigue
+// vigente: si otra pestaña creó un "no leído" más nuevo, expectedMarkedUnreadAt
+// convierte esta petición en un no-op y el punto no se borra por error.
+function acknowledgeUnread(agentId, key, row) {
+  if (!agentId || !key || !row || !row.unread) return;
+  const scope = rk(agentId, key);
+  if (unreadAcks.has(scope)) return;
+  const expected = Number.isSafeInteger(row.markedUnreadAt) ? row.markedUnreadAt : null;
+  const request = hubFetch('/api/session-read', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent: agentId, key, expectedMarkedUnreadAt: expected }),
+  }).then(async response => {
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.error) return false;
+    if (agentId !== state.agent) return true;
+    const current = state.sessions.find(session => session.key === key);
+    if (!current) return true;
+    if (result.unread === false) {
+      current.unread = false;
+      current.markedUnreadAt = null;
+      renderSessions();
+    } else if (result.unread === true) {
+      current.unread = true;
+      if (Number.isSafeInteger(result.markedUnreadAt)) current.markedUnreadAt = result.markedUnreadAt;
+    } else {
+      loadSessions();
+    }
+    return true;
+  }).catch(() => false).finally(() => unreadAcks.delete(scope));
+  unreadAcks.set(scope, request);
+}
+
 async function readSessionList() {
   if (!state.agent) return;
   const listVersion = ++sessionListVersion;
@@ -1012,6 +1045,13 @@ async function readSessionList() {
     }
   }
   renderSessions();
+  const currentRow = state.sessions.find(session => session.key === state.current);
+  // Solo la lectura automática (sin marcador manual) se resuelve mientras la
+  // conversación está abierta. Un "no leído" manual se conserva hasta abrirla
+  // de nuevo, como en el Control UI.
+  if (currentRow && currentRow.unread && currentRow.markedUnreadAt == null && !document.hidden) {
+    acknowledgeUnread(agentId, currentRow.key, currentRow);
+  }
   updateCtx();
   renderModels();
   reconcileRuns();   // el gateway ya dijo quién tiene turno activo: ajustar la barra
@@ -1682,6 +1722,8 @@ async function selectSession(key, options = {}) {
   // Secuencia compartida con reloadFinalMessages (ver renderHistorySequence)
   renderHistorySequence(box, r.messages);
   renderHistoryPager(page);
+  // El historial vivo ya cargó: confirmar la lectura que el usuario tiene delante.
+  if (s) acknowledgeUnread(agentId, key, s);
   if (isRunning(s)) {
     if (liveBubble) {
       state.streamBubble = liveBubble; state.streamText = liveText;

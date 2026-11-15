@@ -1458,7 +1458,9 @@ app.get('/api/sessions', requireAuth, async (req, res) => {
           parentLabel: par ? (par.label || par.displayName || '') : '',
           depth: visibleDepth({ chain }),
           children: childCount.get(r.key) || 0,
-          unread: !!r.unread, pinned: pinnedSessions[l.id+"|"+r.key] !== undefined ? pinnedSessions[l.id+"|"+r.key] : !!r.pinned,
+          unread: !!r.unread,
+          markedUnreadAt: Number.isSafeInteger(r.markedUnreadAt) ? r.markedUnreadAt : null,
+          pinned: pinnedSessions[l.id+"|"+r.key] !== undefined ? pinnedSessions[l.id+"|"+r.key] : !!r.pinned,
           hasActiveRun: !!r.hasActiveRun,
           lastRunFailed: r.status === 'failed' || !!r.abortedLastRun,
           ...sessionSettings(l, r),
@@ -1567,6 +1569,40 @@ app.post("/api/pin", requireAuth, async (req, res) => {
   pinnedSessions[pk] = pinned;
   savePinned();
   res.json({ ok: true, pinned });
+});
+
+// Marcar una sesión como leída. No es un simple "quita el punto": el gateway
+// distingue la lectura automática de un "no leído" manual creado desde otra
+// pestaña. expectedMarkedUnreadAt hace que una marca más nueva gane y que
+// nuestra lectura sea un no-op, en vez de borrar un recordatorio ajeno.
+app.post('/api/session-read', requireAuth, async (req, res) => {
+  const l = getLink(req.body?.agent);
+  if (!l) return res.status(400).json({ error: 'agente desconocido' });
+  const key = String(req.body?.key || '');
+  if (!key) return res.status(400).json({ error: 'falta la sesión' });
+  const expected = req.body?.expectedMarkedUnreadAt;
+  if (!(expected === null || (Number.isSafeInteger(expected) && expected >= 0))) {
+    return res.status(400).json({ error: 'marca de lectura inválida' });
+  }
+  try {
+    let r = await l.req('sessions.patch', { key, unread: false, expectedMarkedUnreadAt: expected });
+    // Gateways anteriores no conocen la marca esperada; no romper la lectura.
+    if (!r.ok && r.error?.code === 'INVALID_REQUEST' && /expectedMarkedUnreadAt|additional propert/i.test(r.error?.message || '')) {
+      r = await l.req('sessions.patch', { key, unread: false });
+    }
+    if (!r.ok) return apiError(res, r, 'El gateway rechazó la marca de lectura');
+    l.sessionsCache.at = 0;
+    let row = null;
+    try {
+      const described = await l.req('sessions.describe', { key }, 8000);
+      if (described.ok) row = described.payload?.session || null;
+    } catch {}
+    res.json({
+      ok: true,
+      unread: row ? !!row.unread : null,
+      markedUnreadAt: row && Number.isSafeInteger(row.markedUnreadAt) ? row.markedUnreadAt : null,
+    });
+  } catch (e) { apiError(res, e, 'No se pudo marcar la sesión como leída'); }
 });
 
 app.get('/api/history', requireAuth, async (req, res) => {

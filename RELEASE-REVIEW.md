@@ -29,6 +29,18 @@ License: MIT. Publication authorized by the project owner on 2026-10-19.
   required. The operational Hub live acceptance covered the working row and
   agent dot; no operational screenshots or data are included here.
 
+## 1.3.1 candidate review
+
+- Web 1.3.1-community.1: opening a conversation acknowledges its native read
+  state with `expectedMarkedUnreadAt`; the unread dot clears and a newer manual
+  marker from another client is not erased. No permissions were expanded.
+- The community tenant stub continues to reject `PANEL_TENANT`; the private
+  per-tenant read route is not exported.
+- Local results: 94/94 backend audit, 29/29 artifact routes, 61/61 question
+  contract, 25/25 user isolation, paste suite TODO OK, 25/25 voice contract,
+  18/18 desktop unit tests; Compose validation and the isolated image build
+  pass. Public CI and anonymous release download remain required.
+
 ## Reviewed scope
 
 - Fresh public history; no operational repository history, users, data or credentials.
