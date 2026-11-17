@@ -699,7 +699,10 @@ function connectWs() {
       invalidateAsyncSessionQuestions(m);
       if (!m.agentId || m.agentId === state.agent) loadSessions();
     }
-    else if (m.type === 'agent_activity') scheduleAgentsReload();
+    else if (m.type === 'agent_activity') {
+      scheduleAgentsReload();
+      if (!m.agentId || m.agentId === state.agent) scheduleSessionListRefresh(250);
+    }
     else if (m.type === 'models' || m.type === 'agent') loadAgents();
     else if (m.type === 'delta') onDelta(m);
     else if (m.type === 'tool') onToolEvent(m);
@@ -967,6 +970,14 @@ function loadSessions() {
 }
 
 const unreadAcks = new Map();
+let sessionRefreshTimer = null;
+function scheduleSessionListRefresh(delay = 300) {
+  if (sessionRefreshTimer) return;
+  sessionRefreshTimer = setTimeout(() => {
+    sessionRefreshTimer = null;
+    if (!document.hidden) loadSessions();
+  }, delay);
+}
 // Lectura automática de la sesión abierta. El gateway decide si la marca sigue
 // vigente: si otra pestaña creó un "no leído" más nuevo, expectedMarkedUnreadAt
 // convierte esta petición en un no-op y el punto no se borra por error.
@@ -988,6 +999,9 @@ function acknowledgeUnread(agentId, key, row) {
       current.unread = false;
       current.markedUnreadAt = null;
       renderSessions();
+      // Una lista que ya estaba en vuelo puede repintar el punto viejo. Releer
+      // el estado autoritativo una vez ha terminado la confirmación.
+      scheduleSessionListRefresh();
     } else if (result.unread === true) {
       current.unread = true;
       if (Number.isSafeInteger(result.markedUnreadAt)) current.markedUnreadAt = result.markedUnreadAt;
@@ -2450,10 +2464,8 @@ function setRunning(agentId, key, on) {
 const STALE_MS = 25000;
 async function reconcileRuns() {
   const now = Date.now();
-  const covered = new Set();
   for (const s of state.sessions || []) {
     const k = rk(state.agent, s.key);
-    covered.add(k);
     if (!state.runningByKey[k] || s.hasActiveRun) continue;      // corre de verdad
     // El gateway AFIRMA que no hay turno: mandamos nosotros, no el sello local.
     // NO usar lastEventByKey aquí: eventos no-laborales (sessions/agent/…) lo
@@ -2461,19 +2473,21 @@ async function reconcileRuns() {
     if (now - (state.runSinceByKey[k] || 0) < STALE_MS) continue;   // turno recien lanzado
     setRunning(state.agent, s.key, false);
   }
-  // La sesión ABIERTA puede no estar en la lista del sidebar (modo "Otras",
-  // recorte por fecha o tope de 120 árboles). Si quedó marcada como activa y no
-  // la cubrimos arriba, preguntamos al gateway por ella: sin esto la barra
-  // "trabajando" se queda pegada para siempre cuando el 'final' no llegó.
+  // La sesión ABIERTA se contrasta siempre con el gateway. La lista puede
+  // conservar un hasActiveRun obsoleto y la fila/barra quedarían "trabajando"
+  // para siempre aunque el turno ya haya cerrado.
+  const currentRow = state.current ? state.sessions.find(s => s.key === state.current) : null;
   const ck = state.current ? rk(state.agent, state.current) : null;
-  if (ck && !covered.has(ck) && state.runningByKey[ck]) {
+  if (ck && (state.runningByKey[ck] || currentRow?.hasActiveRun)) {
     if (now - (state.runSinceByKey[ck] || 0) >= STALE_MS) {
       try {
         const r = await hubFetch(`/api/run-status?agent=${encodeURIComponent(state.agent)}&key=${encodeURIComponent(state.current)}`)
           .then(r => r.json()).catch(() => null);
         // Solo apagamos si el gateway AFIRMA que no hay turno (null = desconocido).
         if (r && r.hasActiveRun === false) {
+          if (currentRow) currentRow.hasActiveRun = false;
           setRunning(state.agent, state.current, false);
+          renderSessions();
         }
       } catch { /* red fallando: no tocamos el estado, ya lo hará el siguiente ciclo */ }
     }
@@ -2489,8 +2503,8 @@ setInterval(() => {
     if (Date.now() - done.at > FINISHED_TTL_MS) { delete state.finishedByKey[k]; pruned = true; }
   }
   if (pruned) renderSessions();
-  if (!Object.values(state.runningByKey).some(Boolean)) return;
   loadSessions();
+  if (Object.values(state.agentBusy).some(Boolean) || (state.sessions || []).some(s => s.hasActiveRun)) loadAgents();
 }, 20000);
 
 // La red de 20 s solo actúa si algo está marcado activo; si la sesión abierta

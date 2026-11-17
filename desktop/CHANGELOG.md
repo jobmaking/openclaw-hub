@@ -1,5 +1,13 @@
 # Hub para Linux
 
+## 1.0.5
+
+- Focus the Hub web view when the window opens, regains focus or receives a
+  second-instance activation. A login or chat could be visible but remain
+  unfocused, so mouse clicks and keys appeared to do nothing.
+- Keep the existing profile, sandbox, X11/XWayland path, downloads and media
+  permissions unchanged.
+
 ## 1.0.4
 
 - Allow microphone-only voice notes after a native consent dialog for the Hub

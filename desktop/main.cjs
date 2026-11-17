@@ -501,6 +501,7 @@ else {
   app.on('second-instance', (_event, argv) => {
     if (!win) return;
     if (win.isMinimized()) win.restore(); win.show(); win.focus();
+    if (view && !view.webContents.isDestroyed()) view.webContents.focus();
     if (argv.includes('--downloads')) showDownloads();
   });
 
@@ -586,7 +587,9 @@ else {
     win.on('resize', () => { layout(); publish(); rememberWindow(); });
     win.on('move', rememberWindow); win.on('maximize', () => { publish(); rememberWindow(); });
     win.on('unmaximize', () => { publish(); rememberWindow(); });
-    for (const event of ['minimize', 'restore', 'focus', 'blur']) win.on(event, publish);
+    for (const event of ['minimize', 'restore', 'blur']) win.on(event, publish);
+    win.on('focus', () => { publish(); if (view && !view.webContents.isDestroyed()) view.webContents.focus(); });
+    win.webContents.on('focus', () => { if (view && !view.webContents.isDestroyed()) view.webContents.focus(); });
     function rememberWindow() {
       clearTimeout(windowTimer); windowTimer = setTimeout(() => {
         if (win.isDestroyed() || win.isMinimized()) return;
@@ -609,7 +612,7 @@ else {
     });
     win.on('closed', () => app.quit());
     win.webContents.on('did-finish-load', () => { shellReady = true; publish(); });
-    win.once('ready-to-show', () => { if (settings.maximized) win.maximize(); win.show(); layout(); });
+    win.once('ready-to-show', () => { if (settings.maximized) win.maximize(); win.show(); win.focus(); if (view && !view.webContents.isDestroyed()) view.webContents.focus(); layout(); });
     ipcMain.handle('hub:command', async (event, name, value) => {
       if (event.sender.id !== win.webContents.id || event.senderFrame?.url !== shellUrl) throw new Error('Forbidden');
       try {
