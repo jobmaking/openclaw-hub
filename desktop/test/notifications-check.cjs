@@ -68,7 +68,7 @@ function broadcast(value, save = true) {
   }
   for (const socket of sockets.clients) if (socket.readyState === 1) socket.send(JSON.stringify(value));
 }
-const question = (id, extra = {}) => ({ type: 'question', agentId: 'lex', sessionKey: 'chat-b', id, phase: 'pending',
+const question = (id, extra = {}) => ({ type: 'question', agentId: 'second', sessionKey: 'chat-b', id, phase: 'pending',
   status: 'pending', questions: [{ question: 'Pregunta Linux ' + id, options: [{ label: 'Continuar', reply: 'Continuar' }] }], ...extra });
 async function native(titlePart) { return until('native notification ' + titlePart, () => notices().findLast(event => event.title.includes(titlePart) || event.body.includes(titlePart))); }
 function activate(id) {
@@ -140,9 +140,9 @@ async function reload() {
     await remote.evaluate('document.getElementById("input").value="Borrador Linux intacto";document.getElementById("input").dispatchEvent(new Event("input",{bubbles:true}))');
     await local.evaluate('hubDesktop.command("minimize")'); await until('minimized window', () => local.evaluate('state.minimized'));
     activate(first.id);
-    await until('click restores the app and opens the correct request', async () => await local.evaluate('!state.minimized && state.focused') && await remote.evaluate('state.agent==="lex" && state.current==="chat-b"'));
+    await until('click restores the app and opens the correct request', async () => await local.evaluate('!state.minimized && state.focused') && await remote.evaluate('state.agent==="second" && state.current==="chat-b"'));
     check('clicking the Linux notification restores and focuses the existing app at the request', true);
-    await remote.evaluate('selectAgent("bu","chat-a")');
+    await remote.evaluate('selectAgent("assistant","chat-a")');
     check('opening another agent from a notice preserves the unsent draft', await remote.evaluate('document.getElementById("input").value==="Borrador Linux intacto"'));
     broadcast(question('q-1', { phase: 'resolved', status: 'answered' }));
     await sleep(1200);
@@ -153,7 +153,7 @@ async function reload() {
     check('a permission requested while minimized reaches Linux', permission.title.includes('pide permiso') && await local.evaluate('state.minimized'));
     activate(permission.id); await until('permission notice restores app', () => local.evaluate('!state.minimized && state.focused'));
     check('opening a permission does not erase the current composer', await remote.evaluate('document.getElementById("input").value==="Borrador Linux intacto"'));
-    const optional = { type: 'async_question', agentId: 'assistant', sessionKey: 'chat-a', asyncQuestion: { itemId: 'optional-1', sourceSessionId: 'fixture-bu-chat-a',
+    const optional = { type: 'async_question', agentId: 'assistant', sessionKey: 'chat-a', asyncQuestion: { itemId: 'optional-1', sourceSessionId: 'fixture-assistant-chat-a',
       sourceMessageId: 'message-1', answerable: true, answered: false, questions: [{ title: 'Pregunta opcional Linux', options: ['A', 'B'] }] } };
     broadcast(optional);
     const optionalNotice = await native('Pregunta opcional Linux');

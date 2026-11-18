@@ -144,7 +144,7 @@ try {
     const r = await request(manager, '/api/skill-proposal?agent=primary&id=update-one&artifactPath=references%2Fcheck.md'); assert.equal(r.body.proposal.artifactContent, 'Complete support file.\n');
     for (const p of ['../private/secret', 'references/../private', '/etc/passwd', 'references/not-listed.md']) assert.equal((await request(manager, '/api/skill-proposal?agent=primary&id=update-one&artifactPath=' + encodeURIComponent(p))).status, 400);
   });
-  await check('installed drift is visible and does not silently secondary or apply a proposal', async () => {
+  await check('installed drift is visible and does not silently mark or apply a proposal', async () => {
     mode = 'drift'; const r = await request(manager, '/api/skill-proposal?agent=primary&id=update-one'); assert.equal(r.body.proposal.canApply, false);
     const before = decisions.length; assert.equal((await request(manager, '/api/skill-proposal-decision', decision('update-one'))).status, 409); assert.equal(decisions.length, before); mode = 'normal';
   });

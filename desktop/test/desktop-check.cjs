@@ -203,7 +203,7 @@ async function stop() {
     for (const [status, name, popup] of [[403, 'no-publicado.exe', false], [404, 'perdido.json', true], [401, 'sesion-caducada.exe', false], [503, 'servicio.json', false]]) {
       const before = fileRequests.length;
       const count = (await downloadStates()).length;
-      const href = '/api/session-file?' + new URLSearchParams({ agent: 'bu', key: 'root', path: name, status: String(status) });
+      const href = '/api/session-file?' + new URLSearchParams({ agent: 'assistant', key: 'root', path: name, status: String(status) });
       await guest.evaluate(popup ? 'window.open(' + JSON.stringify(href) + ',"_blank")' : '(() => {const a=document.createElement("a");a.href=' + JSON.stringify(href) + ';a.click();})()');
       await until('file error request ' + status, () => fileRequests.length > before);
       await until('file error feedback ' + status, async () => await shell.evaluate('state.toast.includes(' + JSON.stringify(String(status)) + ')') || await guest.evaluate('location.pathname!=="/"'));
@@ -234,7 +234,7 @@ async function stop() {
     check('redirects to a login page never save HTML as an EXE or replace the conversation', await guest.evaluate('window.downloadSentinel==="draft-preserved" && location.pathname==="/"') && !fs.existsSync(path.join(downloads, 'caducado.exe')));
     for (const [name, popup] of [['instalador.exe', false], ['configuración.json', true]]) {
       const before = fileRequests.length;
-      const href = '/api/session-file?' + new URLSearchParams({ agent: 'bu', key: 'root', path: name });
+      const href = '/api/session-file?' + new URLSearchParams({ agent: 'assistant', key: 'root', path: name });
       await guest.evaluate(popup ? 'window.open(' + JSON.stringify(href) + ',"_blank")' : '(() => {const a=document.createElement("a");a.href=' + JSON.stringify(href) + ';a.click();})()');
       await until('inline file downloaded ' + name, async () => (await downloadStates()).some((item) => item.name === name && item.state === 'completed'));
       check(name + ' is downloaded byte-for-byte instead of replacing the chat', fs.readFileSync(path.join(downloads, name)).equals(name.endsWith('.exe') ? executable : jsonFile) && await guest.evaluate('location.pathname==="/" && window.downloadSentinel==="draft-preserved"'));

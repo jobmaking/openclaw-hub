@@ -1,4 +1,4 @@
-/* biz-web frontend — minimal chat client */
+/* openclaw-hub frontend — minimal chat client */
 'use strict';
 
 const $ = (id) => document.getElementById(id);

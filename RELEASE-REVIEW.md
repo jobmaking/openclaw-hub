@@ -61,8 +61,9 @@ License: MIT. Publication authorized by the project owner on 2026-10-19.
 - Private hosting profiles excluded; PANEL_TENANT explicitly rejected.
 - Dependency licenses and notices retained in THIRD_PARTY.md.
 - Exact source manifest verified before publication.
-- Local verification: 208 web checks, 17 desktop unit checks, 44 desktop GUI
-  checks and 23 desktop notification checks; 292 checks passed in isolation.
+- Historical initial-preview results (2026-10-19, not current-release totals):
+  208 web checks, 17 desktop unit checks, 44 desktop GUI checks and 23 desktop
+  notification checks; 292 checks passed in that isolated version.
 - Docker Compose validation, image build and isolated installer verification passed.
 - GitHub Actions repeats web/unit checks and image build for this public tree.
 - First private CI run found an undeclared Playwright/browser dependency. It is

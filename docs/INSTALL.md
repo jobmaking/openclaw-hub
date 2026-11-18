@@ -111,6 +111,9 @@ are different metrics. Quotas use the OpenAI OAuth/token account configured for
 the selected agent; API-key billing and other accounts are not inferred. Only
 valid native quota windows show inline bars. No percentage means no quota bar;
 unknown, partial and old token records are not replaced by guessed zeroes.
+In this version the quota button is also the only entry to token details: when
+there is no valid quota window, the separate token detail is not accessible in
+the UI, even if the native token API can return counters.
 Gateway API support is required; missing support is not repaired by updating
 or replacing your gateway automatically.
 

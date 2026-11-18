@@ -129,8 +129,8 @@ Requires `gio`; uses trash rather than deleting user data. Downloaded files rema
 npm ci --prefix desktop
 node desktop/node_modules/electron/install.js
 npm test --prefix desktop
-xvfb-run -a -s '-screen 0 1440x1000x24' node desktop/test/desktop-check.cjs
-xvfb-run -a -s '-screen 0 1440x1000x24' node desktop/test/microphone-check.cjs
+env -u WAYLAND_DISPLAY -u HUB_OZONE_PLATFORM xvfb-run -a -s '-screen 0 1440x1000x24' node desktop/test/desktop-check.cjs
+env -u WAYLAND_DISPLAY -u HUB_OZONE_PLATFORM xvfb-run -a -s '-screen 0 1440x1000x24' node desktop/test/microphone-check.cjs
 ```
 
 The GUI suite additionally requires `python3-gi`, GTK3 and `python3-xlib`
@@ -147,7 +147,7 @@ Notifications can be tested on a private D-Bus/X display with a real EWMH window
 manager (Openbox), `python3-dbus`, `python3-gi` and `gdbus`:
 
 ```bash
-xvfb-run -a -s '-screen 0 1440x1000x24' env \
+env -u WAYLAND_DISPLAY -u HUB_OZONE_PLATFORM xvfb-run -a -s '-screen 0 1440x1000x24' env \
   HUB_DESKTOP_TEST_WM=/usr/bin/openbox node desktop/test/notifications-check.cjs
 ```
 

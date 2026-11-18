@@ -9,7 +9,7 @@ import { WebSocketServer } from 'ws';
 
 const require = createRequire(import.meta.url), express = require('express');
 let chromium;
-for (const candidate of [process.env.PLAYWRIGHT_MODULE, 'playwright-core', 'playwright-core'].filter(Boolean)) {
+for (const candidate of [process.env.PLAYWRIGHT_MODULE, 'playwright-core'].filter(Boolean)) {
   try { chromium = require(candidate).chromium; break; } catch {}
 }
 if (!chromium) throw new Error('Set PLAYWRIGHT_MODULE to an installed playwright-core package.');

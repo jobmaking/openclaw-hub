@@ -21,8 +21,9 @@ are required; this repository does not include models, API credits or a gateway.
 - Scrypt password hashes, signed login cookies and per-user agent/conversation access.
 - Mobile reading-first layout: compact metadata menu when the keyboard reduces height,
   one row for activity/progress/files, and one shared scroll area for questions.
-- Native conversation token totals and supported OpenAI subscription quotas,
-  clearly separated from context usage; absent quota data stays hidden.
+- Supported OpenAI subscription quotas with native conversation token totals
+  in their detail view, separate from context usage; absent quota data stays hidden.
+  With no quota window, this version has no separate token-detail button.
 - Optional Workshop skill review for explicitly authorized users.
 - Responsive layout and installable PWA; optional browser notifications.
 
@@ -99,7 +100,7 @@ bash desktop/install.sh
 
 Open **OpenClaw HUB** in the applications menu. It connects to localhost:18900 by
 default; set your own server in its private configuration. No gateway credentials
-or saved login are bundled. Requires Node22.12+, npm and a Linux graphical desktop.
+or saved login are bundled. Requires Node 22.12+, npm and a Linux graphical desktop.
 The installer downloads the pinned Electron runtime. The desktop client
 (1.0.7-community.1) is optional
 and versioned separately; it does not start the server or include models.

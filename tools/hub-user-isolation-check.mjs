@@ -46,8 +46,8 @@ const rows = new Map([
 const firstLegacy = 'agent:main:dashboard:first-legacy';
 const secondLegacy = 'agent:second:dashboard:second-legacy';
 const sharedRows = new Map([
-  [firstLegacy, makeRow(firstLegacy, { label: 'GAEL-LEGACY', hasActiveRun: true })],
-  [secondLegacy, makeRow(secondLegacy, { agentId: 'second', label: 'PLOTI-LEGACY', hasActiveRun: true })],
+  [firstLegacy, makeRow(firstLegacy, { label: 'FIRST-LEGACY', hasActiveRun: true })],
+  [secondLegacy, makeRow(secondLegacy, { agentId: 'second', label: 'SECOND-LEGACY', hasActiveRun: true })],
 ]);
 const resolvedQuestions = new Set();
 const requests = [], sockets = new Set(), browsers = new Set(), results = [];
@@ -381,10 +381,10 @@ try {
     const registry = JSON.parse(fs.readFileSync(path.join(data, 'session-owners.json')));
     assert.equal(registry.owners[JSON.stringify(['first', key])], undefined);
     assert.equal((await api(cookieBob, '/api/history', { agent: 'assistant', key: old })).status, 403);
-    const fd = new FormData(); fd.append('files', new Blob(['GAEL-SHARED']), 'first.txt');
+    const fd = new FormData(); fd.append('files', new Blob(['FIRST-SHARED']), 'first.txt');
     const upload = await fetch(base + '/api/upload?' + new URLSearchParams({ agent: 'first', key }), { method: 'POST', headers: { Cookie: cookieBob }, body: fd });
     assert.equal(upload.status, 200); const file = (await upload.json()).files[0];
-    assert.equal(await (await api(cookieAlice, '/api/files', { path: 'uploads/' + file.id })).text(), 'GAEL-SHARED');
+    assert.equal(await (await api(cookieAlice, '/api/files', { path: 'uploads/' + file.id })).text(), 'FIRST-SHARED');
     assert.equal((await fetch(base + '/api/upload?' + new URLSearchParams({ agent: 'assistant', key: old }), { method: 'POST', headers: { Cookie: cookieBob } })).status, 403);
     const me = await (await api(cookieBob, '/api/me')).json(); assert.deepEqual(me.sessionScopes, { assistant: 'own' });
   });
@@ -407,7 +407,7 @@ try {
         && request.params.key === foreign), agent + ' must not subscribe to another native agent active run');
     }
     const client = await connect(cookieBob), offset = client.messages.length;
-    for (const [key, marker] of [[firstLegacy, 'GAEL-SHARED-LIVE'], [secondLegacy, 'PLOTI-SHARED-LIVE']]) {
+    for (const [key, marker] of [[firstLegacy, 'FIRST-SHARED-LIVE'], [secondLegacy, 'SECOND-SHARED-LIVE']]) {
       // Deliver every native event to BOTH links, as a shared Gateway does.
       emit('chat', { sessionKey: key, runId: marker, state: 'delta', deltaText: marker }, ['first', 'second']);
       emit('question.requested', question(key), ['first', 'second']);
@@ -431,7 +431,7 @@ try {
     const { UserAccess } = require('../lib/user-access.js');
     const directory = path.join(temporary, 'mixed-scopes'); fs.mkdirSync(directory);
     const users = [{ u: 'alice' }, { u: 'bob', allowedAgents: ['assistant', 'first', 'second'], sessionScopes: { assistant: 'own' } },
-      { u: 'sofi', allowedAgents: ['biz'] }];
+      { u: 'dana', allowedAgents: ['third'] }];
     const access = new UserAccess({ dataDir: directory, users: () => users });
     const assistant = { id: 'assistant', cfg: {} }, first = { id: 'first', cfg: {} };
     access.recordRows(assistant, [makeRow(old)]); access.recordRows(first, [makeRow(old)]);
@@ -441,15 +441,15 @@ try {
     assert.equal(access.canUpload('bob', { agents: ['first', 'second'], owner: 'alice' }), true);
     assert.equal(access.canUpload('bob', { agents: ['first'], owner: 'alice' }, 'assistant'), false);
     assert.equal(access.canUpload('bob', { agents: ['assistant'], owner: 'alice' }), false);
-    assert.equal(access.canUpload('sofi', { agents: ['first'], owner: 'bob' }), false);
-    assert.equal(access.canUpload('sofi', { owner: 'alice' }), false);
+    assert.equal(access.canUpload('dana', { agents: ['first'], owner: 'bob' }), false);
+    assert.equal(access.canUpload('dana', { owner: 'alice' }), false);
     assert.equal(access.canUpload('bob', { agent: 'assistant', owner: 'bob' }), true);
     users[1].sessionScopes = { assistant: 'invalid' }; assert.equal(access.canAgent('bob', 'first'), false);
     assert.equal(access.canUpload('bob', { owner: 'bob' }), false);
     users[1].sessionScopes = {};
     const shared = new UserAccess({ dataDir: path.join(temporary, 'restricted-shared'), users: () => users });
-    assert.equal(shared.canUpload('sofi', { owner: 'bob' }), false);
-    assert.equal(shared.canUpload('sofi', null), false);
+    assert.equal(shared.canUpload('dana', { owner: 'bob' }), false);
+    assert.equal(shared.canUpload('dana', null), false);
     assert.equal(shared.canUpload('bob', { agents: ['first'], owner: 'alice' }), true);
   });
 } finally {

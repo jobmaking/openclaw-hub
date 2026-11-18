@@ -72,7 +72,7 @@ gateway.on('connection', socket => {
   socket.send(JSON.stringify({ type: 'event', event: 'connect.challenge', payload: { nonce: 'inert-question-contract' } }));
   socket.on('message', raw => {
     const frame = JSON.parse(raw), p = frame.params || {};
-    if (frame.method === 'connect') owner = p.auth?.token === 'inert-secondary-token' ? 'secondary' : 'main';
+    if (frame.method === 'connect') owner = p.auth?.token === 'inert-mark-token' ? 'secondary' : 'main';
     requests.push({ method: frame.method, params: p, owner });
     const reply = (payload, error) => socket.send(JSON.stringify({ type: 'res', id: frame.id, ok: !error, ...(error ? { error } : { payload }) }));
     switch (frame.method) {
@@ -135,7 +135,7 @@ try {
   fs.writeFileSync(path.join(temporary, 'notify.json'), JSON.stringify({ enabled: false }));
   fs.writeFileSync(path.join(temporary, 'agents.json'), JSON.stringify([
     { id: 'primary', gatewayAgentId: 'main', url: `ws://127.0.0.1:${gateway.address().port}`, token: 'inert-main-token' },
-    { id: 'secondary', gatewayAgentId: 'secondary', url: `ws://127.0.0.1:${gateway.address().port}`, token: 'inert-secondary-token' },
+    { id: 'secondary', gatewayAgentId: 'secondary', url: `ws://127.0.0.1:${gateway.address().port}`, token: 'inert-mark-token' },
   ]));
   const listener = http.createServer(); listener.listen(0, '127.0.0.1'); await once(listener, 'listening');
   const port = listener.address().port; await new Promise(resolve => listener.close(resolve)); base = 'http://127.0.0.1:' + port;
@@ -165,12 +165,12 @@ try {
     assert(received.some(message => message.type === 'question' && message.agentId === 'secondary' && message.id === 'blocking-native' && message.sessionKey === markKey));
   });
   await check('a global native question list never clones a foreign agent question into this panel link', () => {
-    assert(!received.some(message => message.type === 'question' && message.agentId === 'primary' && message.id === 'foreign-from-secondary'));
+    assert(!received.some(message => message.type === 'question' && message.agentId === 'primary' && message.id === 'foreign-from-mark'));
     assert(!received.some(message => message.type === 'question' && message.agentId === 'secondary' && message.id === 'foreign-from-main'));
   });
   await check('a guessed blocking question from another agent cannot be resolved through this link', async () => {
     const count = requests.filter(request => request.method === 'question.resolve').length;
-    const response = await api('/api/question', { agent: 'primary', id: 'foreign-from-secondary', answers: { delivery: ['two'] } });
+    const response = await api('/api/question', { agent: 'primary', id: 'foreign-from-mark', answers: { delivery: ['two'] } });
     assert.equal(response.status, 403); assert.equal(requests.filter(request => request.method === 'question.resolve').length, count);
   });
   await check('blocking allowEmpty uses the real double-nested empty answer list', async () => {
@@ -203,16 +203,16 @@ try {
     assert.equal((await api('/api/question', { agent: 'primary', id: 'blocking-secret', answers: { credential: ['   '] } })).status, 200);
     assert.deepEqual(requests.findLast(request => request.method === 'question.resolve').params.answers.answers.credential, ['   ']);
   });
-  broadcast('question.requested', { ...foreignBlocking('main'), id: 'global-secondary-live' });
-  await until(() => received.some(message => message.type === 'question' && message.id === 'global-secondary-live'), 'global blocking event');
+  broadcast('question.requested', { ...foreignBlocking('main'), id: 'global-mark-live' });
+  await until(() => received.some(message => message.type === 'question' && message.id === 'global-mark-live'), 'global blocking event');
   await check('global blocking requested events are attributed only to their native gateway agent', () => {
-    const events = received.filter(message => message.type === 'question' && message.id === 'global-secondary-live');
+    const events = received.filter(message => message.type === 'question' && message.id === 'global-mark-live');
     assert.equal(events.length, 1); assert.equal(events[0].agentId, 'secondary');
   });
-  broadcast('question.resolved', { id: 'global-secondary-live', status: 'answered' });
-  await until(() => received.some(message => message.type === 'question' && message.id === 'global-secondary-live' && message.phase === 'resolved'), 'minimal global blocking resolution');
+  broadcast('question.resolved', { id: 'global-mark-live', status: 'answered' });
+  await until(() => received.some(message => message.type === 'question' && message.id === 'global-mark-live' && message.phase === 'resolved'), 'minimal global blocking resolution');
   await check('minimal global resolved events remove only a previously owned card', () => {
-    const events = received.filter(message => message.type === 'question' && message.id === 'global-secondary-live' && message.phase === 'resolved');
+    const events = received.filter(message => message.type === 'question' && message.id === 'global-mark-live' && message.phase === 'resolved');
     assert.equal(events.length, 1); assert.equal(events[0].agentId, 'secondary');
   });
   const query = '?' + new URLSearchParams({ agent: 'primary', key });
@@ -274,10 +274,10 @@ try {
   socket.send(JSON.stringify({ type: 'watch', agentId: 'secondary', sessionKey: markKey }));
   await until(() => requests.some(request => request.method === 'sessions.messages.subscribe' && request.owner === 'secondary' && request.params.key === markKey), 'second gateway agent subscription');
   await pause(30);
-  broadcast('session.message', { agentId: 'secondary', sessionKey: markKey, sessionId: sid, message: question('secondary-live', 15) });
+  broadcast('session.message', { agentId: 'secondary', sessionKey: markKey, sessionId: sid, message: question('mark-live', 15) });
   await check('native question events on a shared gateway retain only their owning panel agent', async () => {
-    await until(() => received.some(message => message.type === 'async_question' && message.asyncQuestion?.itemId === 'secondary-live'), 'second agent question');
-    const events = received.filter(message => message.type === 'async_question' && message.asyncQuestion?.itemId === 'secondary-live');
+    await until(() => received.some(message => message.type === 'async_question' && message.asyncQuestion?.itemId === 'mark-live'), 'second agent question');
+    const events = received.filter(message => message.type === 'async_question' && message.asyncQuestion?.itemId === 'mark-live');
     assert.equal(events.length, 1); assert.equal(events[0].agentId, 'secondary'); assert.equal(events[0].sessionKey, markKey);
   });
   const responseBody = { agent: 'primary', key, itemId: 'native-pending', sourceSessionId: sid, answers: ['Two'] };

@@ -23,7 +23,7 @@ const realCapture=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevice
 navigator.mediaDevices.getUserMedia=async constraints=>{const stream=await realCapture(constraints);window.voiceTracks.push(...stream.getTracks());return stream;};
 async function requestCapture(constraints){window.result='pending';try{window.stream=await navigator.mediaDevices.getUserMedia(constraints);window.result='granted';}catch(error){window.result=error.name;}}
 let draft=JSON.parse(localStorage.getItem('mic-fixture-draft')||'{"text":""}');const editor=document.getElementById('input');editor.value=draft.text;
-const context={user:'native-mic-fixture',agent:'bu',key:'agent:main:microphone',sessionId:'mic-transcript',voiceEnabled:true};
+const context={user:'native-mic-fixture',agent:'assistant',key:'agent:main:microphone',sessionId:'mic-transcript',voiceEnabled:true};
 const adapter={context:()=>context,fetch:window.fetch.bind(window),readDraft:()=>draft,writeDraft:next=>{draft=next;localStorage.setItem('mic-fixture-draft',JSON.stringify(draft));},saveDraft(){this.writeDraft({...draft,text:editor.value});},restoreDraft(){editor.value=draft.text;},updateComposer(){},refreshHistory(){}};
 editor.addEventListener('input',()=>adapter.saveDraft());HubVoice.init(adapter);HubVoice.select(context);
 </script></body></html>`;

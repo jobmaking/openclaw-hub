@@ -1,4 +1,4 @@
-// hub-web — panel personal multi-agente sobre gateways OpenClaw.
+// openclaw-hub — panel personal multi-agente sobre gateways OpenClaw.
 // Un backend mantiene una conexión WS por agente (configured in agents.json)
 // y multiplexa todos los navegadores. Chat + sesiones + archivos + STOP +
 // contexto + selector de modelo. Sin pantallas de configuración.
@@ -618,7 +618,7 @@ class AgentLink {
       minProtocol: 2, maxProtocol: 4,
       client: { id: 'cli', version: '1.0', platform: 'linux', mode: 'cli' },
       role: 'operator', scopes, caps: this.settingsOnly || publicTenant ? [] : ['tool-events'], commands: [], permissions: {},
-      auth: { token }, locale: 'es-ES', userAgent: 'hub-web/1.0',
+      auth: { token }, locale: 'es-ES', userAgent: 'openclaw-hub/1.0',
       device: { id: id.deviceId, publicKey: id.publicKey, signature, signedAt, nonce },
     }}));
   }
@@ -1298,7 +1298,7 @@ const activityAt = (r) => Math.max(r.lastActivityAt || 0, r.lastInteractionAt ||
 // del panel: así el subagente de un cron no ensucia, pero se ve de quién cuelga.
 // ---------------------------------------------------------------------------
 // De qué cuelga una fila: `parentSessionKey` es lo canónico, pero el gateway no siempre lo
-// rellena (25 de 28 subagentes de "bu" venían sin él). `spawnedBy`/`controlOwnerSessionKey`
+// rellena (puede faltar en subagentes). `spawnedBy`/`controlOwnerSessionKey`
 // dicen quién la lanzó y sí vienen siempre.
 const parentOf = (r) => r.parentSessionKey || r.spawnedBy || r.controlOwnerSessionKey || (r.forkSource && r.forkSource.key) || null;
 
