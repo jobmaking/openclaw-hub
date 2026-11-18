@@ -101,7 +101,7 @@ Open **OpenClaw HUB** in the applications menu. It connects to localhost:18900 b
 default; set your own server in its private configuration. No gateway credentials
 or saved login are bundled. Requires Node22.12+, npm and a Linux graphical desktop.
 The installer downloads the pinned Electron runtime. The desktop client
-(1.0.6-community.1) is optional
+(1.0.7-community.1) is optional
 and versioned separately; it does not start the server or include models.
 Full setup, features and sandbox requirements: [desktop/README.md](desktop/README.md).
 

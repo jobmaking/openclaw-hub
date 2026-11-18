@@ -1,5 +1,12 @@
 # Hub para Linux
 
+## 1.0.7
+
+- Ignore late focus/activation while closing, including a WebContentsView whose
+  webContents is already gone. Prevent the native exception dialog on close and
+  preserve clean restart, saved login and download history.
+- Keep native Wayland preference, explicit X11 override and renderer sandbox.
+
 ## 1.0.6
 
 - Prefer native Wayland in a Wayland session so GNOME delivers window focus,

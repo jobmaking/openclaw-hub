@@ -111,4 +111,13 @@ function windowBounds(saved, displays) {
   return bounds;
 }
 
-module.exports = { hubUrl, externalUrl, sameOrigin, hubDocument, microphonePermission, downloadLink, safeFilename, nextDownloadPath, readJson, writeJson, restoreDownloads, windowBounds };
+// Focus events can arrive while Electron is tearing down WebContentsView.
+function focusLiveView(view, quitting = false) {
+  if (quitting) return false;
+  const contents = view?.webContents;
+  if (!contents || contents.isDestroyed()) return false;
+  contents.focus();
+  return true;
+}
+
+module.exports = { hubUrl, externalUrl, sameOrigin, hubDocument, microphonePermission, downloadLink, safeFilename, nextDownloadPath, readJson, writeJson, restoreDownloads, windowBounds, focusLiveView };

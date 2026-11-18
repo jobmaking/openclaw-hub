@@ -12,9 +12,11 @@
   cannot overwrite another account, agent or conversation. No polling or storage.
 - Respect explicit skill-review authorization also for own-conversation users;
   conversation privacy and global skill administration are separate privileges.
-- Include Linux desktop 1.0.6-community.1: native Wayland preference with explicit
+- Include Linux desktop 1.0.7-community.1: native Wayland preference with explicit
   X11 override, preserving profiles, sandbox, downloads and voice permissions.
   Native Wayland drag-and-drop remains unverified; the file picker is available.
+- Ignore late desktop focus callbacks after the web view has been destroyed,
+  preventing a native exception dialog when closing and reopening the client.
 - Expand public CI with usage, model settings, skill-review and mobile regression
   fixtures using the declared pinned browser dependency. Physical phone IMEs
   and independent third-party gateway versions are not certified by these tests.

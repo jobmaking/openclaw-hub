@@ -154,7 +154,7 @@ xvfb-run -a -s '-screen 0 1440x1000x24' env \
 Tests isolate profiles and notifications from your desktop. Passing them does not
 certify every Linux distribution, compositor or notification service.
 
-Desktop 1.0.6-community.1 selects native Wayland when `WAYLAND_DISPLAY` is
+Desktop 1.0.7-community.1 selects native Wayland when `WAYLAND_DISPLAY` is
 available, avoiding a GNOME/XWayland focus mismatch; X11 sessions still use X11.
 The window and its embedded web view are focused when opened or reactivated.
 This does not change the desktop session or disable sandboxing.

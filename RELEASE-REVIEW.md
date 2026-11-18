@@ -5,7 +5,7 @@ License: MIT. Publication authorized by the project owner on 2026-10-19.
 
 ## 1.3.7 candidate review
 
-- Web 1.3.7-community.1 and optional Linux desktop 1.0.6-community.1 source.
+- Web 1.3.7-community.1 and optional Linux desktop 1.0.7-community.1 source.
 - Mobile reading layout, supported provider quotas, scoped token totals and
   explicit own-scope skill-review privileges are included. No operational
   data, account settings, gateway credentials or private hosting adapters.

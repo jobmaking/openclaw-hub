@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
-const { hubUrl, externalUrl, sameOrigin, hubDocument, microphonePermission, downloadLink, nextDownloadPath, readJson, writeJson, restoreDownloads, windowBounds } = require('./core.cjs');
+const { hubUrl, externalUrl, sameOrigin, hubDocument, microphonePermission, downloadLink, nextDownloadPath, readJson, writeJson, restoreDownloads, windowBounds, focusLiveView } = require('./core.cjs');
 const { snapshotScript, openScript, pendingItems, HubNotifications } = require('./notifications.cjs');
 const version = require('./package.json').version;
 
@@ -91,10 +91,10 @@ else {
   function showDownloads(value = true) { downloadsOpen = value; layout(); publish(); }
 
   function focusHub() {
-    if (!win || win.isDestroyed()) return;
+    if (quitting || !win || win.isDestroyed()) return;
     if (win.isMinimized()) win.restore();
     win.show(); win.focus();
-    if (!view.webContents.isDestroyed()) view.webContents.focus();
+    focusLiveView(view, quitting);
   }
 
   function nativeNotice(options, clicked = () => {}) {
@@ -499,9 +499,8 @@ else {
   }
 
   app.on('second-instance', (_event, argv) => {
-    if (!win) return;
-    if (win.isMinimized()) win.restore(); win.show(); win.focus();
-    if (view && !view.webContents.isDestroyed()) view.webContents.focus();
+    if (quitting || !win || win.isDestroyed()) return;
+    focusHub();
     if (argv.includes('--downloads')) showDownloads();
   });
 
@@ -588,8 +587,8 @@ else {
     win.on('move', rememberWindow); win.on('maximize', () => { publish(); rememberWindow(); });
     win.on('unmaximize', () => { publish(); rememberWindow(); });
     for (const event of ['minimize', 'restore', 'blur']) win.on(event, publish);
-    win.on('focus', () => { publish(); if (view && !view.webContents.isDestroyed()) view.webContents.focus(); });
-    win.webContents.on('focus', () => { if (view && !view.webContents.isDestroyed()) view.webContents.focus(); });
+    win.on('focus', () => { if (quitting) return; publish(); focusLiveView(view, quitting); });
+    win.webContents.on('focus', () => focusLiveView(view, quitting));
     function rememberWindow() {
       clearTimeout(windowTimer); windowTimer = setTimeout(() => {
         if (win.isDestroyed() || win.isMinimized()) return;
@@ -608,11 +607,12 @@ else {
       for (const notification of otherNotifications) notification.close();
       otherNotifications.clear();
       settings.window = win.getNormalBounds(); settings.maximized = win.isMaximized(); saveSettings(); saveHistory();
-      if (!view.webContents.isDestroyed()) view.webContents.close();
+      const contents = view?.webContents;
+      if (contents && !contents.isDestroyed()) contents.close();
     });
     win.on('closed', () => app.quit());
     win.webContents.on('did-finish-load', () => { shellReady = true; publish(); });
-    win.once('ready-to-show', () => { if (settings.maximized) win.maximize(); win.show(); win.focus(); if (view && !view.webContents.isDestroyed()) view.webContents.focus(); layout(); });
+    win.once('ready-to-show', () => { if (quitting || win.isDestroyed()) return; if (settings.maximized) win.maximize(); focusHub(); layout(); });
     ipcMain.handle('hub:command', async (event, name, value) => {
       if (event.sender.id !== win.webContents.id || event.senderFrame?.url !== shellUrl) throw new Error('Forbidden');
       try {

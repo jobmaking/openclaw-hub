@@ -5,7 +5,21 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { hubUrl, externalUrl, sameOrigin, hubDocument, microphonePermission, downloadLink, safeFilename, nextDownloadPath, restoreDownloads, writeJson, readJson, windowBounds } = require('../core.cjs');
+const { hubUrl, externalUrl, sameOrigin, hubDocument, microphonePermission, downloadLink, safeFilename, nextDownloadPath, restoreDownloads, writeJson, readJson, windowBounds, focusLiveView } = require('../core.cjs');
+
+test('late focus ignores closing, missing and destroyed web contents', () => {
+  let calls = 0;
+  const active = { webContents: { isDestroyed: () => false, focus: () => calls++ } };
+  for (const view of [null, undefined, {}, { webContents: undefined },
+    { webContents: { isDestroyed: () => true, focus: () => assert.fail('destroyed focus') } }]) {
+    assert.equal(focusLiveView(view), false);
+  }
+  assert.equal(focusLiveView({ get webContents() { throw Error('closing view accessed'); } }, true), false);
+  assert.equal(focusLiveView(active, true), false);
+  assert.equal(calls, 0);
+  assert.equal(focusLiveView(active), true);
+  assert.equal(calls, 1);
+});
 
 test('microphone permission never authorizes cameras, screens, unknown media or subframes', () => {
   assert.equal(microphonePermission('media', { isMainFrame: true, mediaType: 'audio' }), true);
