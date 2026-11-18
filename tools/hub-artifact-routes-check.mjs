@@ -23,7 +23,7 @@ const media = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': content.length }); res.end(content);
 });
 media.listen(0, '127.0.0.1'); await once(media, 'listening');
-const cfg = { id: 'bu', gatewayAgentId: 'main', url: 'ws://127.0.0.1:' + media.address().port + '/ws', token: 'native-owner-credential-should-never-leak' };
+const cfg = { id: 'primary', gatewayAgentId: 'main', url: 'ws://127.0.0.1:' + media.address().port + '/ws', token: 'native-owner-credential-should-never-leak' };
 let behavior = 'normal';
 const link = { cfg, async req(method, params) {
   calls.push({ method, params });
@@ -50,15 +50,15 @@ const link = { cfg, async req(method, params) {
   return { ok: false, error: { message: 'Unknown method' } };
 } };
 const app = express(); app.use((req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
-if (mountArtifactRoutes) mountArtifactRoutes(app, { getLink: id => id === 'bu' ? link : null, agents: [cfg], requireAuth: (req, res, next) => req.headers.cookie === 'fixture=authenticated' ? next() : res.status(401).json({ error: 'Unauthorized' }), diagnosticFromError: (error, context) => diagnosticFrom(error, context, createRedactor([cfg.token])) });
+if (mountArtifactRoutes) mountArtifactRoutes(app, { getLink: id => id === 'primary' ? link : null, agents: [cfg], requireAuth: (req, res, next) => req.headers.cookie === 'fixture=authenticated' ? next() : res.status(401).json({ error: 'Unauthorized' }), diagnosticFromError: (error, context) => diagnosticFrom(error, context, createRedactor([cfg.token])) });
 app.use((req, res) => res.status(404).json({ error: 'Route unavailable' }));
 const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
 const base = 'http://127.0.0.1:' + server.address().port;
 const key = 'agent:main:dashboard:artifacts';
-const get = (route, params = {}, headers = {}) => fetch(base + route + '?' + new URLSearchParams({ agent: 'bu', key, ...params }), { headers: { Cookie: 'fixture=authenticated', ...headers }, redirect: 'manual' });
+const get = (route, params = {}, headers = {}) => fetch(base + route + '?' + new URLSearchParams({ agent: 'primary', key, ...params }), { headers: { Cookie: 'fixture=authenticated', ...headers }, redirect: 'manual' });
 try {
   await check('artifact routes are part of the release', () => assert.equal(typeof mountArtifactRoutes, 'function'));
-  await check('downloads require Hub authentication', async () => assert.equal((await fetch(base + '/api/artifacts?agent=bu&key=' + encodeURIComponent(key))).status, 401));
+  await check('downloads require Hub authentication', async () => assert.equal((await fetch(base + '/api/artifacts?agent=primary&key=' + encodeURIComponent(key))).status, 401));
   await check('unknown agents are refused before RPC', async () => { const before = calls.length; assert.equal((await get('/api/artifacts', { agent: 'foreign' })).status, 400); assert.equal(calls.length, before); });
   await check('foreign Gateway agent sessions are refused before RPC', async () => { const before = calls.length; assert.equal((await get('/api/artifacts', { key: 'agent:foreign:main' })).status, 403); assert.equal(calls.length, before); });
   await check('current Gateway session permission gates every read', async () => { behavior = 'denied'; assert.equal((await get('/api/artifacts')).status, 403); behavior = 'normal'; });

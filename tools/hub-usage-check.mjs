@@ -1,0 +1,101 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const require = createRequire(import.meta.url);
+const { mountUsageRoutes, projectTokens, projectSubscription } = require('../lib/usage-routes');
+const { UserAccess } = require('../lib/user-access');
+const dir = mkdtempSync(join(tmpdir(), 'hub-usage-'));
+const key = 'agent:main:dashboard:test';
+let time = 1800000000000, calls = [], fault = false, mismatch = false, change = false, authFault = false, authUsage = true;
+let row = { key, agentId: 'main', sessionId: 'session-one', modelProvider: 'openai', model: 'example', updatedAt: 1 };
+const payload = () => ({ updatedAt: time, cacheStatus: { status: 'fresh' }, sessions: [{ ...row, scope: 'instance', usage: { input: 11, output: 7, cacheRead: 3, cacheWrite: 2, totalTokens: 23, totalCost: 999, email: 'SECRET' }, origin: { email: 'SECRET' } }], totals: { totalTokens: 999999 }, creatorOptions: ['SECRET'] });
+const link = { id: 'primary', cfg: { gatewayAgentId: 'main' }, gatewayMethods: new Set(['sessions.usage', 'models.authStatus']), async req(method, params) {
+  calls.push([method, params]);
+  if (method === 'sessions.describe') return { ok: true, payload: { session: { ...row } } };
+  if (method === 'models.authStatus') {
+    assert.deepEqual(params, { agentId: 'main' });
+    if (authFault) throw new Error('SECRET auth email');
+    return { ok: true, payload: { ts: time, providers: [{ provider: 'openai', profiles: [{ type: 'oauth' }, { type: 'api_key' }], accountEmail: 'SECRET', usage: authUsage ? { providerId: 'openai', plan: 'team', accountEmail: 'SECRET', windows: [{ label: '5h', usedPercent: 30, resetAt: time + 1000 }, { label: 'Week', usedPercent: 5, resetAt: time + 2000 }] } : undefined }] }};
+  }
+  assert.equal(method, 'sessions.usage');
+  assert.deepEqual(params, { key, agentId: 'main', range: 'all', groupBy: 'instance', limit: 1, includeContextWeight: false });
+  if (fault) throw new Error('SECRET auth email');
+  const p = payload();
+  if (mismatch) p.sessions[0].sessionId = 'other';
+  if (change) row = { ...row, model: 'changed', updatedAt: row.updatedAt + 1 };
+  await new Promise(resolve => setTimeout(resolve, 5));
+  return { ok: true, payload: p };
+} };
+const users = [{ u: 'owner', allowedAgents: ['primary'], sessionScope: 'own' }, { u: 'other', allowedAgents: ['primary'], sessionScope: 'own' }, { u: 'blocked', allowedAgents: [] }];
+const access = new UserAccess({ dataDir: dir, users: () => users });
+access.claim('owner', link, key);
+function setup(publicTenant = false) {
+  let handlers;
+  mountUsageRoutes({ get(path, ...h) { assert.equal(path, '/api/usage'); handlers = h; } }, { getLink: id => id === 'primary' ? link : null, requireAuth(req, res, next) { return req.user ? next() : res.status(401).json({ error: 'auth required' }); }, access, publicTenant, now: () => time });
+  return async (user = 'owner', query = { agent: 'primary', key }) => {
+    const req = { user, query }, res = { code: 200, headers: {}, status(c) { this.code = c; return this; }, setHeader(k,v) { this.headers[k] = v; }, json(v) { this.body = v; return this; } };
+    await handlers[0](req, res, () => handlers[1](req, res));
+    assert.ok(!JSON.stringify(res.body).includes('SECRET'));
+    return res;
+  };
+}
+try {
+  const request = setup();
+  for (const [user, code] of [[null,401], ['blocked',403], ['other',403]]) assert.equal((await request(user)).code, code);
+  assert.equal((await request('owner', { agent: 'else', key })).code, 403);
+  assert.equal((await request('owner', { agent: 'primary', key: 'agent:other:dashboard:test' })).code, 403);
+  assert.equal((await setup(true)()).code,403);
+  assert.equal(calls.length,0);
+  const [a,b] = await Promise.all([request(),request()]);
+  assert.equal(a.body.tokens.total,23); assert.equal(b.body.tokens.partial,false);
+  assert.equal(calls.filter(([m]) => m === 'sessions.usage').length,1);
+  assert.equal(a.body.subscription.status,'ready'); assert.equal(a.body.subscription.shared,true); assert.equal(a.body.subscription.scope,'agent-provider');
+  assert.equal(a.body.subscription.credentialType,'oauth'); assert.equal(a.body.subscription.plan,'team');
+  assert.deepEqual(a.body.subscription.windows.map(w => 100 - w.usedPercent),[70,95]);
+  assert.ok(!JSON.stringify(a.body).includes('totalCost')); assert.ok(!JSON.stringify(a.body).includes('accountEmail')); assert.equal(a.headers['Cache-Control'],'no-store');
+  const beforeCached = calls.filter(([m]) => m === 'sessions.usage').length;
+  await request(); assert.equal(calls.filter(([m]) => m === 'sessions.usage').length,beforeCached);
+  authUsage = false; assert.equal((await request()).body.subscription.status,'refreshing'); authUsage = true;
+  authFault = true; assert.equal((await request()).body.subscription.status,'unavailable'); authFault = false;
+  row = { ...row, authProfileId: 'another-account' }; assert.equal((await request()).body.subscription.status,'unavailable');
+  row = { ...row, authProfileId: undefined, modelProvider: 'deepseek' }; assert.equal((await request()).body.subscription.status,'unsupported');
+  row = { ...row, modelProvider: 'openai' };
+  assert.equal(projectSubscription({ ts: time, providers: [{ provider: 'openai', profiles: [{ type: 'api_key' }] }] }, row).status,'unsupported');
+  const beforeModelChange = calls.filter(([m]) => m === 'sessions.usage').length;
+  row = { ...row, model: 'another', updatedAt: 2 }; await request();
+  assert.equal(calls.filter(([m]) => m === 'sessions.usage').length,beforeModelChange + 1);
+  time += 6000; fault = true; assert.equal((await request()).body.tokens.status,'unavailable'); fault = false;
+  time += 6000; mismatch = true; assert.equal((await request()).body.tokens.total,null); mismatch = false;
+  time += 6000; change = true; assert.equal((await request()).body.tokens.status,'unavailable'); change = false;
+  time += 6000; link.gatewayMethods.clear(); assert.equal((await request()).body.tokens.status,'ready');
+  time += 6000; fault = true; assert.equal((await request()).body.tokens.status,'unavailable'); fault = false;
+  const p = payload(); p.cacheStatus.status = 'partial'; assert.equal(projectTokens(p,key,'main',row,time).partial,true);
+  p.cacheStatus.status = 'stale'; assert.equal(projectTokens(p,key,'main',row,time).status,'refreshing');
+  p.updatedAt -= 180000;
+  const oldSnapshot = projectTokens(p,key,'main',row,time);
+  assert.equal(oldSnapshot.status,'refreshing'); assert.equal(oldSnapshot.total,23); assert.equal(oldSnapshot.updatedAt,p.updatedAt);
+  p.updatedAt = time; p.cacheStatus.status = 'fresh'; delete p.sessions[0].usage.input;
+  assert.equal(projectTokens(p,key,'main',row,time).input,null);
+  // An explicit native zero is valid; absence must never be coerced to zero.
+  const zero = payload();
+  zero.sessions[0].usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 };
+  const zeroTokens = projectTokens(zero,key,'main',row,time);
+  assert.equal(zeroTokens.status,'ready'); assert.equal(zeroTokens.partial,false);
+  for (const name of ['input','output','cacheRead','cacheWrite','total']) assert.equal(zeroTokens[name],0);
+  zero.sessions[0].usage = {};
+  const absentTokens = projectTokens(zero,key,'main',row,time);
+  assert.equal(absentTokens.partial,true);
+  for (const name of ['input','output','cacheRead','cacheWrite','total']) assert.equal(absentTokens[name],null);
+  zero.sessions[0].usage = null;
+  assert.equal(projectTokens(zero,key,'main',row,time).status,'refreshing');
+  assert.equal(projectTokens(zero,key,'main',row,time).total,null);
+  zero.sessions[0].usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0 };
+  zero.sessions[0].computing = true;
+  assert.equal(projectTokens(zero,key,'main',row,time).total,null);
+  p.sessions[0].scope = 'family'; assert.equal(projectTokens(p,key,'main',row,time).status,'unavailable');
+  p.sessions[0].scope = 'instance'; p.sessions[0].agentId = 'other'; assert.equal(projectTokens(p,key,'main',row,time).total,null);
+  assert.ok(calls.every(([m]) => ['sessions.describe','sessions.usage','models.authStatus'].includes(m)));
+  console.log('RESULTADO: TODO OK — usage ACL, tenant, exact scope, OAuth quota 70/95, cumulative tokens, cache/coalescing, switch, partial/stale/error, sanitization, no API-key/other-account quota');
+} finally { rmSync(dir, { recursive: true, force: true }); }

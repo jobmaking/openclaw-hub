@@ -96,6 +96,7 @@
     const badge = trigger.querySelector('.hub-sr-badge');
     badge.textContent = count === null ? owner.listError ? '!' : '…' : String(count);
     trigger.dataset.error = String(!!owner.listError);
+    trigger.dataset.count = count === null || owner.listError ? '' : String(count);
     trigger.setAttribute('aria-expanded', String(!!ui?.dialog.open));
     trigger.setAttribute('aria-label', 'Revisar skills: ' + (count === null ? 'recuento no disponible' : count + ' pendientes') + (owner.listError ? '. No se pudo actualizar; abre para ver el error.' : ''));
     trigger.title = 'Revisar skills' + (owner.listError ? ' · No se pudo actualizar' : '');

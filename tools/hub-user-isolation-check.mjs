@@ -109,7 +109,7 @@ gateway.on('connection', socket => {
     return reply({ ok: true, aborted: true, truncated: false });
   });
 });
-fs.writeFileSync(path.join(data, 'agents.json'), JSON.stringify((mixed ? ['assistant', 'bu', 'first', 'second'] : ['assistant', 'bu']).map(id => ({ id, name: id,
+fs.writeFileSync(path.join(data, 'agents.json'), JSON.stringify((mixed ? ['assistant', 'primary', 'first', 'second'] : ['assistant', 'primary']).map(id => ({ id, name: id,
   token: 'inert-' + id, url: 'ws://127.0.0.1:' + gateway.address().port + '/ws', fileRoots: [{ base: workspace }],
   ...(['first', 'second'].includes(id) ? { gatewayAgentId: id === 'first' ? 'main' : 'second' } : {}) }))));
 async function start() {
@@ -167,7 +167,7 @@ try {
     assert.equal(general.centralCount, 0);
   });
   const blocked = [
-    ['GET', '/api/sessions', { agent: 'bu' }], ['POST', '/api/sessions', { agent: 'bu' }],
+    ['GET', '/api/sessions', { agent: 'primary' }], ['POST', '/api/sessions', { agent: 'primary' }],
     ...['/api/history', '/api/history-page', '/api/session-settings', '/api/run-status', '/api/activity', '/api/artifacts'].map(route => ['GET', route, { agent: 'assistant', key: old }]),
     ['GET', '/api/artifact-download', { agent: 'assistant', key: old, id: 'private-artifact' }],
     ['DELETE', '/api/sessions', { agent: 'assistant', key: old }],
@@ -276,7 +276,7 @@ try {
       assert.equal(response.status, 200, 'Owners can resolve their own blocking questions');
     }
     let chromium;
-    for (const candidate of ['playwright-core', process.env.PLAYWRIGHT_MODULE, path.join(os.homedir(), '.npm-global/lib/node_modules/openclaw/node_modules/playwright-core')].filter(Boolean)) {
+    for (const candidate of ['playwright-core', process.env.PLAYWRIGHT_MODULE, 'playwright-core'].filter(Boolean)) {
       try { chromium = require(candidate).chromium; break; } catch {}
     }
     assert.ok(chromium, 'An installed playwright-core is required for the user boundary acceptance test');

@@ -18,6 +18,7 @@ const { mountMessageQueue, readMessageQueue } = require('./lib/message-queue');
 const { mountArtifactRoutes } = require('./lib/artifact-routes');
 const { VoiceRoutes } = require('./lib/voice-routes');
 const { UserAccess } = require('./lib/user-access');
+const { mountUsageRoutes } = require('./lib/usage-routes');
 const { createPublicTenant } = require('./lib/public-tenant');
 const { mountSkillReview, SKILL_REVIEW_ROUTES } = require('./lib/skill-review');
 const { normalizeBlockingQuestion, blockingQuestionInScope, transcriptIdentity, readAsyncQuestion, AsyncQuestionTracker,
@@ -1043,6 +1044,7 @@ sessionRouteOptions.decorateMessage = (req, link, key, message, sessionId, rawMe
 mountSessionBrowse(app, sessionRouteOptions);
 mountMessageQueue(app, sessionRouteOptions);
 mountArtifactRoutes(app, sessionRouteOptions);
+mountUsageRoutes(app, { getLink, requireAuth, access, publicTenant });
 voice.mount(app);
 mountSkillReview(app, { getLink, access, publicTenant, originAllowed: browserOriginAllowed });
 
@@ -1250,7 +1252,7 @@ app.get('/api/agents', requireAuth, (req, res) => {
         working,
         fileTransport: Array.isArray(a.fileRoots) ? 'mounted' : 'gateway',
         voiceEnabled: !!voice.node(a.id),
-        ...(!publicTenant ? { skillsReviewEnabled: access.canReviewSkills(req.user, a.id) } : {}),
+        ...(!publicTenant ? { skillsReviewEnabled: access.canReviewSkills(req.user, a.id), usageEnabled: true } : {}),
         error: l?.connected ? null : (l?.lastError || null),
         // Agentes con modelo fijado a propósito (decisión del dueño): sin selector
         lockedModel: !!a.lockedModel,

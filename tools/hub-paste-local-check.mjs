@@ -102,7 +102,7 @@ try {
     document.getElementById('login-view').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     document.getElementById('composer').classList.remove('hidden');
-    state.agent = 'bu'; state.current = 'root';
+    state.agent = 'primary'; state.current = 'root';
     state.pendingFiles = []; renderChips();
     return true;
   })()`);

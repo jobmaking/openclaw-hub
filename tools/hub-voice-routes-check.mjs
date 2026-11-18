@@ -44,7 +44,7 @@ const alternate = http.createServer((req, res) => { foreignNodeCalls++; res.end(
 const engineUrl = await listen(engine), alternateUrl = await listen(alternate);
 fs.writeFileSync(path.join(root, 'voice.json'), JSON.stringify({ version: 1, nodes: {
   primary: { url: engineUrl, token }, independent: { url: alternateUrl, token },
-}, agents: { bu: 'primary', assistant: 'independent' } }));
+}, agents: { primary: 'primary', assistant: 'independent' } }));
 const makeLink = id => ({ id, cfg: { gatewayAgentId: 'main' }, async req(method, params) {
   nativeCalls.push({ method, params });
   if (method === 'sessions.describe') { describeCalls++; return denied ? { ok: false, error: { code: 'FORBIDDEN' } }
@@ -53,16 +53,16 @@ const makeLink = id => ({ id, cfg: { gatewayAgentId: 'main' }, async req(method,
     messages: rawMessages } };
   throw new Error('Unexpected RPC');
 } });
-const links = { bu: makeLink('bu'), assistant: makeLink('assistant'), disabled: makeLink('disabled') };
+const links = { primary: makeLink('primary'), assistant: makeLink('assistant'), disabled: makeLink('disabled') };
 const options = { dataDir: root, getLink: id => links[id], authorizeSession: async (req, link, key) => req.user !== 'no-access',
   requireAuth: (req, res, next) => { if (!req.headers['x-test-user']) return res.status(401).json({ error: 'authentication required' }); req.user = req.headers['x-test-user']; next(); } };
 const voice = new VoiceRoutes(options);
 const app = express(); app.use(express.json()); voice.mount(app);
 const server = http.createServer(app), base = await listen(server);
-const url = (route, query = {}) => base + route + '?' + new URLSearchParams({ agent: 'bu', key: sessionKey, ...query });
+const url = (route, query = {}) => base + route + '?' + new URLSearchParams({ agent: 'primary', key: sessionKey, ...query });
 const get = (route, query = {}, user = 'alice', headers = {}) => fetch(url(route, query), { headers: { ...(user ? { 'x-test-user': user } : {}), ...headers } });
 const post = (route, body = {}, user = 'alice') => fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-test-user': user },
-  body: JSON.stringify({ agent: 'bu', key: sessionKey, ...body }) });
+  body: JSON.stringify({ agent: 'primary', key: sessionKey, ...body }) });
 const transcribe = (query = {}, type = 'audio/webm', user = 'alice') => {
   const form = new FormData(); form.append('audio', new Blob([Buffer.from('synthetic-audio-fixture')], { type }), 'voice.webm');
   return fetch(url('/api/voice/transcribe', query), { method: 'POST', headers: { 'x-test-user': user }, body: form });
@@ -71,12 +71,12 @@ let note;
 try {
   await check('no credentials or configuration enables no engine', () => {
     assert.deepEqual(readConfig('/does-not-exist', false), { nodes: {}, agents: {}, invalid: false });
-    assert.equal(new VoiceRoutes({ ...options, disabled: true }).node('bu'), null);
+    assert.equal(new VoiceRoutes({ ...options, disabled: true }).node('primary'), null);
   });
   await check('node egress stays loopback and rejects embedded credentials', () => {
     const config = path.join(root, 'bad.json');
     for (const value of ['http://outside.invalid:8898', 'http://name:password@127.0.0.1:8898']) {
-      fs.writeFileSync(config, JSON.stringify({ version: 1, nodes: { bad: { url: value, token } }, agents: { bu: 'bad' } }));
+      fs.writeFileSync(config, JSON.stringify({ version: 1, nodes: { bad: { url: value, token } }, agents: { primary: 'bad' } }));
       assert.equal(readConfig(config, false).invalid, true);
     }
   });
@@ -122,22 +122,22 @@ try {
     assert.equal(response.headers.get('content-type'), 'audio/webm'); assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   });
   await check('definite rejection unlocks an unsent note but uncertain and accepted receipts remain protected', async () => {
-    const prepared = await voice.prepareSend('alice', links.bu, sessionKey, note.id, 'rejected-run');
-    await assert.rejects(voice.prepareSend('alice', links.bu, sessionKey, note.id, 'other-attempt'), /ya se ha enviado/);
+    const prepared = await voice.prepareSend('alice', links.primary, sessionKey, note.id, 'rejected-run');
+    await assert.rejects(voice.prepareSend('alice', links.primary, sessionKey, note.id, 'other-attempt'), /ya se ha enviado/);
     voice.rejectSend(prepared, 'unrelated-run'); assert.equal(prepared.runId, 'rejected-run');
     voice.rejectSend(prepared, 'rejected-run'); assert.equal(prepared.runId, undefined);
-    assert.equal((await voice.prepareSend('alice', links.bu, sessionKey, note.id, 'native-run-1')).id, note.id);
+    assert.equal((await voice.prepareSend('alice', links.primary, sessionKey, note.id, 'native-run-1')).id, note.id);
   });
   await check('native admission receipts bind notes without transcript text matching', async () => {
-    const prepared = await voice.prepareSend('alice', links.bu, sessionKey, note.id, 'native-run-1'); voice.commitSend(prepared, 'native-run-1');
+    const prepared = await voice.prepareSend('alice', links.primary, sessionKey, note.id, 'native-run-1'); voice.commitSend(prepared, 'native-run-1');
     const raw = { role: 'user', content: 'Texto editado después de transcribir.', idempotencyKey: 'native-run-1:user', __openclaw: { id: 'user-1' } };
     rawMessages.push(raw);
-    const view = voice.decorateMessage('alice', 'bu', sessionKey, raw, activeSession, rawMessages);
+    const view = voice.decorateMessage('alice', 'primary', sessionKey, raw, activeSession, rawMessages);
     assert.equal(view.voiceNote.id, note.id);
-    assert.equal(voice.decorateMessage('alice', 'bu', sessionKey, { ...raw, idempotencyKey: 'another-run:user', __openclaw: { id: 'other-user' } }, activeSession).voiceNote, undefined);
-    assert.equal(voice.decorateMessage('bob', 'bu', sessionKey, raw, activeSession).voiceNote, undefined);
-    await assert.rejects(voice.prepareSend('alice', links.bu, sessionKey, note.id, 'different-run'), /ya se ha enviado/);
-    assert.equal((await voice.prepareSend('alice', links.bu, sessionKey, note.id, 'native-run-1')).id, note.id);
+    assert.equal(voice.decorateMessage('alice', 'primary', sessionKey, { ...raw, idempotencyKey: 'another-run:user', __openclaw: { id: 'other-user' } }, activeSession).voiceNote, undefined);
+    assert.equal(voice.decorateMessage('bob', 'primary', sessionKey, raw, activeSession).voiceNote, undefined);
+    await assert.rejects(voice.prepareSend('alice', links.primary, sessionKey, note.id, 'different-run'), /ya se ha enviado/);
+    assert.equal((await voice.prepareSend('alice', links.primary, sessionKey, note.id, 'native-run-1')).id, note.id);
     voice.rejectSend(prepared, 'native-run-1'); assert.equal(prepared.accepted, true); assert.equal(prepared.runId, 'native-run-1');
   });
   await check('published original rechecks the exact native transcript message', async () => {
@@ -153,7 +153,7 @@ try {
     __openclaw: { id: 'answer-1', runId: 'native-run-1' }, stopReason: 'stop' };
   rawMessages.push(assistant);
   await check('only native final-phase metadata enables automatic answer identity', () => {
-    const view = voice.decorateMessage('alice', 'bu', sessionKey, assistant, activeSession, rawMessages);
+    const view = voice.decorateMessage('alice', 'primary', sessionKey, assistant, activeSession, rawMessages);
     assert.equal(view.phase, 'final_answer'); assert.equal(view.runId, 'native-run-1'); assert.equal(view.speakable, true);
     assert.equal(phaseOf({ content: [{ type: 'text', text: 'Progress', textSignature: '{"v":1,"phase":"commentary"}' }] }), 'commentary');
   });
@@ -161,7 +161,7 @@ try {
     const commentary = { ...assistant, phase: 'commentary', __openclaw: { id: 'commentary-1' } };
     rawMessages.push(commentary);
     assert.equal((await post('/api/voice/speech', { messageId: 'commentary-1', sessionId: activeSession })).status, 422);
-    const failed = { ...assistant, errorMessage: 'failed' }; assert.equal(voice.decorateMessage('alice', 'bu', sessionKey, failed, activeSession).speakable, false);
+    const failed = { ...assistant, errorMessage: 'failed' }; assert.equal(voice.decorateMessage('alice', 'primary', sessionKey, failed, activeSession).speakable, false);
   });
   let spoken;
   await check('parallel speech requests deduplicate and only read native answer text', async () => {
@@ -176,7 +176,7 @@ try {
   await check('cached spoken audio is persisted and native-message revalidated', async () => {
     const response = await get('/api/voice/audio', { id: spoken.id }); assert.equal(response.status, 200); assert.deepEqual(Buffer.from(await response.arrayBuffer()), mp3);
     const before = speechCalls; assert.equal((await (await post('/api/voice/speech', { messageId: 'answer-1', sessionId: activeSession })).json()).id, spoken.id); assert.equal(speechCalls, before);
-    const reopened = new VoiceRoutes(options); assert.equal(reopened.decorateMessage('alice', 'bu', sessionKey, assistant, activeSession).voiceAudio.id, spoken.id);
+    const reopened = new VoiceRoutes(options); assert.equal(reopened.decorateMessage('alice', 'primary', sessionKey, assistant, activeSession).voiceAudio.id, spoken.id);
   });
   await check('editing a native answer invalidates its previous audio', async () => {
     const original = assistant.content; assistant.content = [{ type: 'text', text: 'Contenido nuevo.' }];
@@ -184,10 +184,10 @@ try {
   });
   await check('legacy final correlation needs exact run, text and a unique message', () => {
     const legacy = { role: 'assistant', content: 'Respuesta final antigua', __openclaw: { id: 'legacy-1', runId: 'legacy-run' } };
-    voice.observeFinal('bu', { state: 'final', sessionKey, runId: 'legacy-run', message: { content: legacy.content } });
-    assert.equal(voice.decorateMessage('alice', 'bu', sessionKey, legacy, activeSession, [legacy]).phase, 'final_answer');
-    assert.equal(voice.decorateMessage('alice', 'bu', sessionKey, legacy, activeSession, [legacy, legacy]).phase, undefined);
-    assert.equal(voice.decorateMessage('alice', 'bu', sessionKey, { ...legacy, __openclaw: { id: 'legacy-2', runId: 'foreign-run' } }, activeSession, [legacy]).phase, undefined);
+    voice.observeFinal('primary', { state: 'final', sessionKey, runId: 'legacy-run', message: { content: legacy.content } });
+    assert.equal(voice.decorateMessage('alice', 'primary', sessionKey, legacy, activeSession, [legacy]).phase, 'final_answer');
+    assert.equal(voice.decorateMessage('alice', 'primary', sessionKey, legacy, activeSession, [legacy, legacy]).phase, undefined);
+    assert.equal(voice.decorateMessage('alice', 'primary', sessionKey, { ...legacy, __openclaw: { id: 'legacy-2', runId: 'foreign-run' } }, activeSession, [legacy]).phase, undefined);
   });
   await check('spoken long answers explicitly report partial audio', () => {
     const value = spokenText('Una frase completa. '.repeat(700)); assert.equal(value.truncated, true); assert.ok(value.text.length <= 6000); assert.ok(value.totalChars > value.spokenChars);

@@ -269,7 +269,7 @@
     progressSignature = signature;
     const wasOpen = nodes.progress.querySelector('details')?.open || false;
     const details = el('details', 'ha-progress-card'); details.open = wasOpen;
-    const summary = el('summary', '', 'Progreso del agente');
+    const summary = el('summary', '', 'Progreso'); summary.setAttribute('aria-label', 'Progreso del agente');
     const body = el('div', 'ha-progress-content');
     if (card.markdown) appendProgressMarkdown(body, String(card.markdown));
     const steps = card.steps || card.plan || [];

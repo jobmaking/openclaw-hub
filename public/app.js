@@ -473,6 +473,7 @@ async function selectAgent(id, restoreKey = null) {
   mobileKeepNav = isMobile() && document.body.classList.contains('nav-open');
   // Al cambiar de agente, volver a la última sesión que abriste con él.
   if (!restoreKey && id !== state.agent) restoreKey = lastByAgent[id] || null;
+  window.HubUsage?.reset();
   state.agent = id;
   window.HubSkillReview?.refresh();
   reportedFailed.clear();   // cambiar de agente: resetear notificaciones de fallo
@@ -534,6 +535,7 @@ async function selectAgent(id, restoreKey = null) {
 }
 
 function showLogin() {
+  window.HubUsage?.reset();
   window.HubVoice?.reset();
   window.HubQueue?.reset();
   $('login-view').classList.remove('hidden');
@@ -552,6 +554,7 @@ $('login-form').addEventListener('submit', async (e) => {
 });
 
 $('btn-logout').addEventListener('click', async () => {
+  window.HubUsage?.reset();
   saveDraft();
   window.HubVoice?.reset();
   try {
@@ -1203,6 +1206,7 @@ function effortLabel(level) {
 }
 
 function renderModels() {
+  window.HubUsage?.sync();
   const controls = $('model-controls');
   const a = curAgent();
   controls.classList.toggle('hidden', !supports('modelSettings') || !a || !state.current);
@@ -1681,6 +1685,7 @@ function showNewSessionFailure(message, agent) {
 }
 
 async function selectSession(key, options = {}) {
+  window.HubUsage?.reset();
   const agentId = state.agent;
   if (state.current && state.current !== key) saveDraft();
   const navigationVersion = ++chatNavigationVersion;
@@ -1905,6 +1910,7 @@ function focusHistoryAnchor(page, id) {
 }
 
 function renderEmpty() {
+  window.HubUsage?.reset();
   window.HubVoice?.reset();
   window.HubQueue?.select(null, null);
   const a = curAgent();
@@ -1936,7 +1942,7 @@ function updateCtx() {
   const pct = Math.min(100, Math.round(100 * s.totalTokens / win));
   $('ctx-fill').style.width = pct + '%';
   $('ctx-fill').className = pct >= 90 ? 'danger' : pct >= 70 ? 'warn' : '';
-  $('ctx-text').textContent = `${fmtK(s.totalTokens)} / ${fmtK(win)} (${pct}%)`;
+  $('ctx-text').textContent = `Ctx · ${pct}% usado`;
   // En móvil el texto se oculta: el propio medidor lleva el aviso en el título
   $('ctx-meter').title = `Contexto ${pct}% · ${fmtK(s.totalTokens)}/${fmtK(win)} · modelo: ${s.model || '?'}`;
   $('ctx-meter').classList.toggle('warn', pct >= 70 && pct < 90);
@@ -2328,6 +2334,7 @@ function onTerminal(m) {
   if (window.HubActivity && !window.HubActivity.guardTerminal(m)) return;
   if (m.agentId === state.agent && m.sessionKey === state.current && RUN.runId && m.runId && RUN.runId !== m.runId) return;
   window.HubVoice?.terminal(m);
+  window.HubUsage?.terminal(m);
   const rkey = rk(m.agentId, m.sessionKey);
   // Deja constancia del cierre en la lista (aunque la sesión no esté abierta)
   // para que "Trabajando" se convierta en "Listo/Detenido/Error" sin abrirla.
@@ -2681,6 +2688,7 @@ function updateComposerState() {
   $('btn-stop').classList.toggle('hidden', !stopping && !state.running && !window.HubQueue?.hasPending(state.agent, state.current));
   $('btn-stop').disabled = offline || stopping;
   $('btn-stop').title = stopping ? 'Deteniendo la respuesta actual; la cola se conserva' : 'Parar respuesta actual sin borrar los mensajes en espera';
+  $('btn-stop').setAttribute('aria-label', $('btn-stop').title);
   document.querySelectorAll('#chips .x').forEach(button => { button.disabled = pending; });
   window.HubVoice?.setLocked(pending || stopping || question || state.historyLoading || !!modelSettingsPending || !!uploading || !state.current);
   const notice = sendNotices.get(scope);
@@ -4213,7 +4221,17 @@ function scheduleStreamRender() {
 (() => {
   const vv = window.visualViewport;
   const app = $('app'), panels = $('session-panels');
-  let frame = null;
+  const overview = $('session-overview'), overviewToggle = $('btn-session-overview');
+  let frame = null, overviewScope = null;
+  const setOverview = open => {
+    overview.classList.toggle('expanded', open);
+    overviewToggle.setAttribute('aria-expanded', String(open));
+  };
+  overviewToggle.addEventListener('click', () => { setOverview(!overview.classList.contains('expanded')); schedule(); });
+  overview.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || event.isComposing || !app.classList.contains('viewport-compact')) return;
+    setOverview(false); overviewToggle.focus(); schedule();
+  });
   const variable = (name, value) => {
     if (app.style.getPropertyValue(name) !== value) app.style.setProperty(name, value);
   };
@@ -4227,7 +4245,8 @@ function scheduleStreamRender() {
     if (!isMobile() && !coarsePointer()) {
       app.classList.remove('viewport-fit', 'viewport-compact');
       app.style.height = ''; app.style.transform = '';
-      for (const name of ['--editor-max-height', '--session-panels-max-height', '--composer-extra-max-height', '--model-settings-max-height', '--question-editor-max-height']) app.style.removeProperty(name);
+      for (const name of ['--hub-visual-height', '--hub-visual-top']) document.documentElement.style.removeProperty(name);
+      for (const name of ['--editor-max-height', '--session-panels-max-height', '--composer-extra-max-height', '--model-settings-max-height', '--question-editor-max-height', '--overview-max-height']) app.style.removeProperty(name);
       autogrow(); return;
     }
     // Preserve normal browser magnification: pinching must not reflow the whole conversation.
@@ -4237,8 +4256,23 @@ function scheduleStreamRender() {
     // Read at execution time: a queued frame may belong to a newly selected conversation.
     const tailTolerance = Math.max(6, parseFloat(getComputedStyle(input).lineHeight) || 0);
     const followCaret = document.activeElement === input && input.selectionStart === input.value.length && input.selectionEnd === input.value.length && input.scrollHeight - input.clientHeight - input.scrollTop <= tailTolerance;
-    app.classList.add('viewport-fit'); app.classList.toggle('viewport-compact', height <= 540);
+    const compact = height <= 540;
+    const scope = rk(state.agent, state.current);
+    if (overviewScope !== scope) {
+      // A new conversation starts compact unless one of its controls owns focus.
+      if (!overview.contains(document.activeElement)) setOverview(false);
+      overviewScope = scope;
+    }
+    // Do not hide a focused select/field when the browser opens its keyboard.
+    if (compact && !app.classList.contains('viewport-compact') && overview.contains(document.activeElement)) setOverview(true);
+    app.classList.add('viewport-fit'); app.classList.toggle('viewport-compact', compact);
+    variable('--overview-max-height', Math.max(44, Math.floor(height * (height <= 340 ? 0.20 : 0.36))) + 'px');
+    const warning = $('ctx-meter').matches('.warn, .danger') ? $('ctx-text').textContent : '';
+    overviewToggle.setAttribute('aria-label', 'Modelo, esfuerzo y consumo' + (warning ? '. ' + warning : ''));
+    overviewToggle.title = warning || 'Modelo, esfuerzo y consumo';
     app.style.height = height + 'px';
+    document.documentElement.style.setProperty('--hub-visual-height', height + 'px');
+    document.documentElement.style.setProperty('--hub-visual-top', (vv?.offsetTop || 0) + 'px');
     app.style.transform = vv?.offsetTop ? `translateY(${vv.offsetTop}px)` : '';
     const voiceOpen = !$('voice-draft')?.classList.contains('hidden') && !document.body.classList.contains('prompt-open');
     variable('--composer-extra-max-height', voiceOpen ? Math.max(96, Math.min(230, Math.floor(height * 0.34))) + 'px'
@@ -4250,12 +4284,14 @@ function scheduleStreamRender() {
     const historyStyle = getComputedStyle($('messages'));
     const historyPadding = (parseFloat(historyStyle.paddingTop) || 0) + (parseFloat(historyStyle.paddingBottom) || 0);
     const questionOpen = document.body.classList.contains('prompt-open');
-    const reserve = questionOpen ? 0 : Math.min(48, height * 0.12);
+    const expandedPanel = panels.querySelector(':scope > details[open], :scope > .hub-progress details[open]');
+    const reserve = questionOpen ? 0 : compact ? Math.min(220, height * (expandedPanel || overview.classList.contains('expanded') ? 0.18 : 0.44)) : Math.min(48, height * 0.12);
+    const panelStrip = compact && panels.querySelector('.hub-activity:not(.hidden), .hub-progress:not(.hidden), .hub-artifacts:not(.hidden)') ? 44 : 0;
     const composerChrome = Math.max(0, outerHeight(composer) - composer.querySelector('.composer-row').getBoundingClientRect().height);
-    const editorLimit = Math.max(46, Math.min(160, Math.floor(height * 0.32), height - fixed - composerChrome - historyPadding - reserve));
+    const editorLimit = Math.max(46, Math.min(160, Math.floor(height * 0.32), height - fixed - composerChrome - historyPadding - reserve - panelStrip));
     variable('--editor-max-height', Math.floor(editorLimit) + 'px');
     autogrow();
-    const panelLimit = Math.max(questionOpen ? 96 : 36, Math.min(height * 0.42, height - fixed - outerHeight(composer) - historyPadding - reserve));
+    const panelLimit = Math.max(questionOpen ? 96 : 44, Math.min(height * 0.42, height - fixed - outerHeight(composer) - historyPadding - reserve));
     variable('--session-panels-max-height', Math.floor(panelLimit) + 'px');
     if (followCaret) input.scrollTop = input.scrollHeight;
     const focused = document.activeElement;
@@ -4267,6 +4303,8 @@ function scheduleStreamRender() {
   window.addEventListener('resize', schedule); window.addEventListener('orientationchange', schedule);
   $('input').addEventListener('focus', schedule);
   $('input').addEventListener('input', schedule);
+  panels.addEventListener('toggle', schedule, true);
+  new MutationObserver(schedule).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
   const observed = new WeakSet();
   const observeLayout = () => {
@@ -4375,6 +4413,14 @@ window.HubActivity?.init({
   },
 });
 installSessionBrowseUI();
+window.HubUsage?.init({
+  fetch: hubFetch,
+  context: () => {
+    const s = modelSettings.get(rk(state.agent, state.current)) || state.sessions.find(s => s.key === state.current);
+    return { user: state.user, agent: state.agent, key: state.current, enabled: curAgent()?.usageEnabled === true,
+      provider: s?.modelProvider || null, model: s?.model || null };
+  },
+});
 function voiceContext() {
   return { user: state.user, agent: state.agent, key: state.current, voiceEnabled: curAgent()?.voiceEnabled === true,
     sessionId: historyPages.get(rk(state.agent, state.current))?.sessionId || null };

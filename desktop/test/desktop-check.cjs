@@ -130,11 +130,18 @@ class CDP {
 
 async function start() {
   fs.rmSync(path.join(profile, 'DevToolsActivePort'), { force: true });
-  child = spawn(path.join(root, 'openclaw-hub-desktop'), ['--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1'],
+  const probe = http.createServer();
+  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
+  port = probe.address().port;
+  await new Promise(resolve => probe.close(resolve));
+  child = spawn(path.join(root, 'openclaw-hub-desktop'), ['--remote-debugging-port=' + port, '--remote-debugging-address=127.0.0.1'],
     { env: { ...process.env, DBUS_SESSION_BUS_ADDRESS: 'unix:path=' + path.join(evidence, 'no-session-bus'), HUB_URL: 'http://127.0.0.1:' + fixture.address().port, HUB_USER_DATA_DIR: profile, XDG_CONFIG_HOME: path.join(evidence, 'config'), XDG_STATE_HOME: path.join(evidence, 'state') }, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stderr.on('data', (chunk) => { log += chunk.toString(); });
-  await until('Electron DevTools', () => fs.existsSync(path.join(profile, 'DevToolsActivePort')) && fs.readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]);
-  port = fs.readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0];
+  // Probe this launch directly: a restarted Electron may not rewrite its port file.
+  await until('Electron DevTools', async () => {
+    if (child.exitCode !== null || child.signalCode !== null) throw new Error('Electron exited before DevTools');
+    try { return (await fetch('http://127.0.0.1:' + port + '/json/version')).ok; } catch { return false; }
+  });
   const targets = await until('shell and Hub targets', async () => {
     try { const list = await (await fetch('http://127.0.0.1:' + port + '/json/list')).json(); return list.some((item) => item.url.startsWith('file:')) && list.some((item) => item.url.startsWith('http:')) ? list : null; } catch { return null; }
   });
@@ -165,11 +172,14 @@ async function downloadStates() { return shell.evaluate('state.downloads'); }
 async function action(id, name) { await shell.evaluate('hubDesktop.command("download-action",' + JSON.stringify({ id, action: name }) + ')'); }
 
 async function stop() {
-  if (!child || child.exitCode !== null) return;
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
   const exited = once(child, 'exit');
   try { await shell.evaluate('hubDesktop.command("close")'); } catch {}
   await Promise.race([exited, sleep(3000)]);
-  if (child.exitCode === null) child.kill('SIGTERM');
+  if (child.exitCode === null && child.signalCode === null) {
+    child.kill('SIGTERM');
+    await Promise.race([exited, sleep(3000)]);
+  }
   shell?.close(); guest?.close();
 }
 

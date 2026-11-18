@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.3.7-community.1 — 2026-11-19
+
+- Compact mobile metadata into a deliberate menu when the visual viewport is
+  short. Activity, progress and files share one row; expanded content and
+  questions use a single outer scroll area. Drafts, selection, zoom and safe
+  areas are preserved. Enabled Stop remains touchable beside blocking questions.
+- Add native conversation token totals and supported OpenAI OAuth subscription
+  quotas beside the context meter. Only real quota windows are displayed;
+  missing data is not zero, stale snapshots are labelled, and late responses
+  cannot overwrite another account, agent or conversation. No polling or storage.
+- Respect explicit skill-review authorization also for own-conversation users;
+  conversation privacy and global skill administration are separate privileges.
+- Include Linux desktop 1.0.6-community.1: native Wayland preference with explicit
+  X11 override, preserving profiles, sandbox, downloads and voice permissions.
+  Native Wayland drag-and-drop remains unverified; the file picker is available.
+- Expand public CI with usage, model settings, skill-review and mobile regression
+  fixtures using the declared pinned browser dependency. Physical phone IMEs
+  and independent third-party gateway versions are not certified by these tests.
+
+## 1.3.2-community.1 — 2026-11-17
+
+- Reconcile the open conversation against native run status after missed terminal
+  events, and refresh session/agent lists without restoring stale unread state.
+- Include Linux desktop 1.0.5-community.1, focusing the window and web view on
+  opening, activation and second-instance requests.
+
 ## 1.3.1-community.1 — 2026-11-15
 
 - Opening a conversation now acknowledges its read state through the native

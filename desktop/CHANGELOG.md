@@ -1,5 +1,13 @@
 # Hub para Linux
 
+## 1.0.6
+
+- Prefer native Wayland in a Wayland session so GNOME delivers window focus,
+  mouse clicks and keyboard input without the XWayland mismatch.
+- Retain X11 for X11 sessions and allow `HUB_OZONE_PLATFORM=x11` or an explicit
+  `--ozone-platform` argument when the previous file-drop path is needed.
+- Preserve the existing profile, sandbox, downloads and media permissions.
+
 ## 1.0.5
 
 - Focus the Hub web view when the window opens, regains focus or receives a

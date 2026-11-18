@@ -303,3 +303,66 @@ body.prompt-open .app.viewport-fit #composer { max-height: 64px; overflow-y: aut
 body.prompt-open .app.viewport-fit #input { max-height: 46px; }
 body.prompt-open .app.viewport-compact .messages { padding-block: 0; }
 .app.viewport-fit .prompt-other { max-height: var(--question-editor-max-height, 150px); }
+
+
+/* Reading/writing takes priority on touch screens. These are the same native
+   controls and panels, never cloned or reparented on focus/viewport changes. */
+.session-overview { flex: none; min-width: 0; }
+.session-overview-toggle { display: none; }
+.app.viewport-fit .session-panels {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-content: start; gap: 4px; padding: 0 12px;
+}
+.app.viewport-fit .session-panels > :is(.hub-activity, .hub-progress, .hub-artifacts) {
+  margin: 0; min-width: 0; border-radius: 10px; font-size: 12px;
+}
+.app.viewport-fit .session-panels:not(:has(.hub-artifacts:not(.hidden))) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.app.viewport-fit .session-panels > :is(details[open], .hub-progress:has(details[open]), .prompts, .run-status, .queue-badge) { grid-column: 1 / -1; }
+.app.viewport-fit :is(.ha-summary, .ha-progress-card > summary, .hub-artifacts > summary) {
+  box-sizing: border-box; min-height: 44px; padding: 12px 9px; line-height: 18px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.app.viewport-fit .ha-summary { padding-block: 11px; }
+.app.viewport-fit .ha-age { display: none; }
+/* Only the parent scrolls: touch gestures must reach a question's Send. */
+.app.viewport-fit :is(.ha-timeline, .ha-progress-content, .ha-artifacts-body) { max-height: none; overflow: visible; }
+.app.viewport-fit .session-panels > .prompts { padding: 3px 0 6px; }
+.app.viewport-fit .session-panels > :is(.run-status, .queue-badge) { margin-inline: 0; }
+.app.viewport-compact #chat-header { min-height: 48px; padding: calc(2px + env(safe-area-inset-top)) 8px 2px; gap: 4px; }
+.app.viewport-compact #chat-sub { display: none; }
+.app.viewport-compact .header-right { gap: 5px; }
+.app.viewport-compact .session-overview-toggle {
+  display: grid; place-items: center; width: 44px; min-width: 44px; height: 44px;
+  padding: 0; font-size: 24px; line-height: 1; background: transparent;
+  border-color: transparent; position: relative;
+}
+.app.viewport-compact .session-overview-toggle[aria-expanded=true] { background: var(--accent2); border-color: var(--accent); }
+.app.viewport-compact:has(.ctx-meter.warn, .ctx-meter.danger, .model-summary.error) .session-overview-toggle::after {
+  content: ''; position: absolute; right: 5px; top: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--warn);
+}
+.app.viewport-compact .session-overview:not(.expanded) { display: none; }
+.app.viewport-compact .session-overview.expanded { max-height: var(--overview-max-height); overflow-y: auto; overscroll-behavior: contain; }
+.app.viewport-compact .session-overview .session-settings,
+.app.viewport-compact .session-overview .model-controls.expanded { max-height: none; overflow: visible; }
+.app.viewport-compact .composer { margin: 4px 8px max(4px, env(safe-area-inset-bottom)); width: calc(100% - 16px); padding: 4px; }
+.app.viewport-compact .session-panels { padding-inline: 8px; }
+.app.viewport-compact .messages { padding: 8px 16px; }
+.app.viewport-fit :is(.ha-summary, .ha-progress-card > summary, .hub-artifacts > summary):focus-visible,
+.session-overview-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+.app.viewport-compact .model-summary:not(.hidden) { display: flex; }
+.app.viewport-compact .model-controls:not(.expanded) { display: none; }
+body:has(.app.viewport-fit) #usage-dialog {
+  position: fixed; inset: auto; top: calc(var(--hub-visual-top, 0px) + 8px); left: 50%;
+  transform: translateX(-50%); margin: 0; max-height: calc(var(--hub-visual-height, 100dvh) - 16px);
+}
+
+.app.viewport-compact:not(:has(.session-overview .model-summary:not(.hidden), .session-overview .ctx-meter:not(.hidden), .session-overview .usage-open:not([hidden]))) .session-overview-toggle { display: none; }
+
+.app.viewport-fit :is(#btn-pending-questions, #btn-attach, #btn-voice, #btn-stop, #btn-send) { min-width: 44px; min-height: 44px; }
+.app.viewport-compact #btn-skill-review[data-count="0"] .hub-sr-badge { display: none; }
+
+/* A blocking question disables writing, not the native Stop action. */
+body.prompt-open .app.viewport-fit #composer .composer-row { opacity: 1; }
+body.prompt-open .app.viewport-fit #composer .composer-row > :not(#btn-stop) { opacity: .3; }
+body.prompt-open .app.viewport-fit #btn-stop:not(:disabled) { pointer-events: auto; }

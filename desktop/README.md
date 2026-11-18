@@ -154,8 +154,14 @@ xvfb-run -a -s '-screen 0 1440x1000x24' env \
 Tests isolate profiles and notifications from your desktop. Passing them does not
 certify every Linux distribution, compositor or notification service.
 
-On Linux, the launcher selects X11/XWayland before Electron starts when `DISPLAY`
-is available. This is the validated native-file-drop path for embedded views.
-It does not change the desktop session or disable sandboxing. An explicit
-`--ozone-platform=wayland` overrides the preference; pure Wayland without
-XWayland retains automatic selection and has not been validated for file drops.
+Desktop 1.0.6-community.1 selects native Wayland when `WAYLAND_DISPLAY` is
+available, avoiding a GNOME/XWayland focus mismatch; X11 sessions still use X11.
+The window and its embedded web view are focused when opened or reactivated.
+This does not change the desktop session or disable sandboxing.
+
+Use `HUB_OZONE_PLATFORM=x11` or `--ozone-platform=x11` to retain the previously
+validated X11/XWayland native-file-drop path. `HUB_OZONE_PLATFORM=wayland` and
+explicit `--ozone-platform` arguments are also supported. Native Wayland file
+drag-and-drop has not been certified; use the file picker if it does not work.
+The isolated GUI suite runs under Xvfb with `WAYLAND_DISPLAY` unset, never on
+your interactive display.

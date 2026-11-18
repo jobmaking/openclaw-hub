@@ -15,6 +15,14 @@ that proxy and direct access is prevented.
   and restrict user policies before giving anyone access.
 - Client-specific Internet-facing hosting profiles are not included. Setting
   `PANEL_TENANT` fails closed in this edition.
+- Skill review is an agent-wide administration privilege, not conversation access.
+  Grant `canReviewSkills: true` only to trusted operators, together with an
+  explicit `allowedAgents` list. An `own` conversation scope does not limit a
+  skill decision to that user: it changes the allowed agent for all its users.
+- Subscription quotas describe the configured agent/provider account shared by
+  its authorized Hub users, not an individual user or conversation. Conversation
+  token totals are separately scoped; account emails, tokens and billing costs
+  are not exposed. Do not share an agent if its quota should remain private.
 - Optional voice audio and generated speech are stored under `data/voice/`.
   Keep `data/` and `data/voice.json` private. The voice token and original/derived
   audio must not be committed, published or exposed through a proxy.

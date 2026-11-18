@@ -96,6 +96,24 @@ When managing users directly, set `DATA_DIR` to the absolute data directory:
 DATA_DIR="$PWD/data" node manage-users.js set colleague
 ```
 
+## Optional skill review and usage
+
+Skill review is disabled unless the user record in private `data/users.json`
+explicitly has `canReviewSkills: true`. Preserve its password hash and existing
+policies when editing; use an explicit `allowedAgents` list and restart the Hub
+after a controlled configuration change. Both shared and own-conversation users
+can receive this privilege, but skill decisions change the agent globally.
+The gateway must support the native Workshop review APIs. Never grant gateway
+admin privileges just to bypass a rejected request.
+
+Context consumption, conversation token totals and provider subscription quotas
+are different metrics. Quotas use the OpenAI OAuth/token account configured for
+the selected agent; API-key billing and other accounts are not inferred. Only
+valid native quota windows show inline bars. No percentage means no quota bar;
+unknown, partial and old token records are not replaced by guessed zeroes.
+Gateway API support is required; missing support is not repaired by updating
+or replacing your gateway automatically.
+
 ## Remote access and HTTPS
 
 The simplest remote setup retains loopback binding and uses an SSH tunnel:

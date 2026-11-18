@@ -3,6 +3,19 @@
 Repository: https://github.com/jobmaking/openclaw-hub
 License: MIT. Publication authorized by the project owner on 2026-10-19.
 
+## 1.3.7 candidate review
+
+- Web 1.3.7-community.1 and optional Linux desktop 1.0.6-community.1 source.
+- Mobile reading layout, supported provider quotas, scoped token totals and
+  explicit own-scope skill-review privileges are included. No operational
+  data, account settings, gateway credentials or private hosting adapters.
+- The public check command now includes the new usage, model, skill-review,
+  mobile keyboard and touch-scrolling fixtures, not just the historical suites.
+- Verify the fresh export, installed launcher, manifest and executable modes;
+  public CI must pass on the exact public SHA before a release is created.
+- Mobile geometry is emulated, not a physical IME certification. Native Wayland
+  file drop and independent third-party installations remain separate checks.
+
 ## 1.1.5 candidate review
 
 - Consolidates the conversation controls into one accessible expandable panel

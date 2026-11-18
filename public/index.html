@@ -10,10 +10,11 @@
 <title>Hub · Agentes</title>
 <link rel="stylesheet" href="style.css?v=41">
 <link rel="stylesheet" href="activity.css?v=1">
-<link rel="stylesheet" href="interface.css?v=4">
+<link rel="stylesheet" href="interface.css?v=5">
 <link rel="stylesheet" href="queue.css?v=1">
 <link rel="stylesheet" href="voice.css?v=1">
 <link rel="stylesheet" href="skill-review.css?v=2">
+<link rel="stylesheet" href="usage.css?v=3">
 <link rel="icon" type="image/png" sizes="32x32" href="/icons/hub-v2/favicon-32.png">
 <link rel="icon" type="image/svg+xml" href="/icon.svg?v=2">
 <link rel="apple-touch-icon" sizes="180x180" href="/icons/hub-v2/apple-touch-icon.png">
@@ -93,14 +94,20 @@
       </div>
       <div class="header-right">
         <button id="btn-pending-questions" class="pending-questions hidden" type="button" aria-label="Ver preguntas pendientes"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9a4 4 0 1 1 6 3.45c-1.4.8-2 1.05-2 2.55M12 18h.01"/><circle cx="12" cy="12" r="10"/></svg><span class="pending-questions-label"></span></button>
-        <div id="ctx-meter" class="ctx-meter hidden" title="Contexto usado">
-          <div class="ctx-bar"><div id="ctx-fill"></div></div>
-          <span id="ctx-text"></span>
-        </div>
+
+        <button id="btn-session-overview" class="session-overview-toggle" type="button" aria-controls="session-overview" aria-expanded="false" aria-label="Ver modelo, esfuerzo y consumo" title="Modelo, esfuerzo y consumo">⋯</button>
     <div id="gw-status" class="gw-status" role="img" aria-label="Conectando con el agente" title="Conexión con el agente"></div>
       </div>
     </header>
 
+    <div id="session-overview" class="session-overview">
+    <div class="session-meters" aria-label="Contexto y cuota">
+        <div id="ctx-meter" class="ctx-meter hidden" title="Contexto usado">
+          <div class="ctx-bar"><div id="ctx-fill"></div></div>
+          <span id="ctx-text"></span>
+        </div>
+      <button id="btn-usage" class="usage-open" type="button" aria-haspopup="dialog" aria-label="Ver detalles de cuota y consumo" hidden><span class="usage-caption">Cuota</span><span id="usage-summary">Consultando…</span><span aria-hidden="true">›</span></button>
+    </div>
     <div id="session-settings" class="session-settings">
     <div id="model-controls" class="model-controls hidden" role="group" aria-label="Modelo y esfuerzo de esta sesión">
       <label class="model-field">API
@@ -115,6 +122,8 @@
       <button id="model-reset" class="model-reset" type="button" title="Restablecer el modelo por defecto del agente">↺ Modelo auto</button>
       <div id="model-settings-status" class="model-settings-status hidden" role="status" aria-live="polite"></div>
     </div>
+    </div>
+
     </div>
 
     <div id="drop-overlay" class="drop-overlay hidden"><div>📎 Suelta los archivos aquí</div></div>
@@ -151,7 +160,7 @@
         <input type="file" id="file-input" multiple hidden>
         <button id="btn-voice" class="hidden" type="button" title="Grabar nota de voz" aria-label="Grabar nota de voz" aria-pressed="false"></button>
         <textarea id="input" rows="1" placeholder="Escribe…" aria-label="Mensaje" aria-describedby="composer-status"></textarea>
-        <button id="btn-stop" class="hidden" title="Parar respuesta y vaciar la cola" aria-label="Parar respuesta y vaciar la cola"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
+        <button id="btn-stop" class="hidden" title="Parar respuesta actual sin borrar los mensajes en espera" aria-label="Parar respuesta actual sin borrar los mensajes en espera"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
         <button id="btn-send" title="Enviar" aria-label="Enviar mensaje"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
       </div>
       <div id="composer-hint" class="composer-hint" aria-hidden="true"></div>
@@ -182,11 +191,17 @@
 </div>
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-<script src="activity.js?v=3"></script>
+<script src="activity.js?v=4"></script>
 <script src="questions.js?v=3"></script>
 <script src="queue.js?v=2"></script>
 <script src="voice.js?v=3"></script>
-<script src="app.js?v=77"></script>
-<script src="skill-review.js?v=2"></script>
+<dialog id="usage-dialog" aria-labelledby="usage-title">
+  <header><h2 id="usage-title">Consumo</h2><button id="usage-close" type="button" autofocus aria-label="Cerrar consumo">Cerrar</button></header>
+  <div class="usage-scroll"><p id="usage-status" role="status" aria-live="polite"></p><div id="usage-content"></div></div>
+  <footer><button id="usage-refresh" type="button">Actualizar</button></footer>
+</dialog>
+<script src="usage.js?v=3"></script>
+<script src="app.js?v=80"></script>
+<script src="skill-review.js?v=3"></script>
 </body>
 </html>

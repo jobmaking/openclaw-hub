@@ -4,7 +4,7 @@ A self-hosted web interface for your OpenClaw agents. Bring several gateways int
 one place, with streaming chat, conversation history, files and per-user access.
 
 **Independent community project. Not an official OpenClaw product.**
-This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.0.37. The interface is
+This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.3.7. The interface is
 currently Spanish-first. A running OpenClaw gateway and its model configuration
 are required; this repository does not include models, API credits or a gateway.
 
@@ -19,6 +19,11 @@ are required; this repository does not include models, API credits or a gateway.
 - File drag-and-drop recovery, including the Linux desktop X11/XWayland file-drop path.
 - Optional voice notes and spoken replies using a local voice service you operate.
 - Scrypt password hashes, signed login cookies and per-user agent/conversation access.
+- Mobile reading-first layout: compact metadata menu when the keyboard reduces height,
+  one row for activity/progress/files, and one shared scroll area for questions.
+- Native conversation token totals and supported OpenAI subscription quotas,
+  clearly separated from context usage; absent quota data stays hidden.
+- Optional Workshop skill review for explicitly authorized users.
 - Responsive layout and installable PWA; optional browser notifications.
 
 Features depend on your gateway's capabilities. The supplied regression tests use
@@ -77,7 +82,9 @@ use `CHROMIUM_PATH` to select a compatible browser already installed.
 Tests exercise the real backend against simulated local gateways: authentication,
 user/session isolation, file boundaries, native question contracts and artifacts.
 The voice route contract is also tested with an inert local service. An isolated
-browser fixture checks clipboard and drag-and-drop recovery.
+browser fixture checks clipboard and drag-and-drop recovery. Public CI also covers
+usage, model settings, skill-review authorization, mobile reading space, keyboard
+geometry and touch-scrolling questions. Emulation does not certify a physical IME.
 They do not use production credentials or call models. CI also builds the Docker
 image. Test fixture credentials and names are synthetic.
 
@@ -94,7 +101,7 @@ Open **OpenClaw HUB** in the applications menu. It connects to localhost:18900 b
 default; set your own server in its private configuration. No gateway credentials
 or saved login are bundled. Requires Node22.12+, npm and a Linux graphical desktop.
 The installer downloads the pinned Electron runtime. The desktop client
-(1.0.4-community.1) is optional
+(1.0.6-community.1) is optional
 and versioned separately; it does not start the server or include models.
 Full setup, features and sandbox requirements: [desktop/README.md](desktop/README.md).
 
