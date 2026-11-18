@@ -5,6 +5,8 @@
 - Ignore late focus/activation while closing, including a WebContentsView whose
   webContents is already gone. Prevent the native exception dialog on close and
   preserve clean restart, saved login and download history.
+- Keep minimized/inactive windows in the background when a window manager emits
+  a late focus event; notifications restore the window only on deliberate activation.
 - Keep native Wayland preference, explicit X11 override and renderer sandbox.
 
 ## 1.0.6

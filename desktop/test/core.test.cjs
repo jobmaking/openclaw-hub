@@ -16,6 +16,8 @@ test('late focus ignores closing, missing and destroyed web contents', () => {
   }
   assert.equal(focusLiveView({ get webContents() { throw Error('closing view accessed'); } }, true), false);
   assert.equal(focusLiveView(active, true), false);
+  assert.equal(focusLiveView(active, false, false), false);
+  assert.equal(focusLiveView({ get webContents() { throw Error('inactive view accessed'); } }, false, false), false);
   assert.equal(calls, 0);
   assert.equal(focusLiveView(active), true);
   assert.equal(calls, 1);

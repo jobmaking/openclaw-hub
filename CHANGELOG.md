@@ -17,6 +17,8 @@
   Native Wayland drag-and-drop remains unverified; the file picker is available.
 - Ignore late desktop focus callbacks after the web view has been destroyed,
   preventing a native exception dialog when closing and reopening the client.
+  Late focus events also respect minimized/inactive windows instead of restoring
+  the client when a background notification arrives.
 - Expand public CI with usage, model settings, skill-review and mobile regression
   fixtures using the declared pinned browser dependency. Physical phone IMEs
   and independent third-party gateway versions are not certified by these tests.

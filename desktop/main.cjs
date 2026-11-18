@@ -587,8 +587,9 @@ else {
     win.on('move', rememberWindow); win.on('maximize', () => { publish(); rememberWindow(); });
     win.on('unmaximize', () => { publish(); rememberWindow(); });
     for (const event of ['minimize', 'restore', 'blur']) win.on(event, publish);
-    win.on('focus', () => { if (quitting) return; publish(); focusLiveView(view, quitting); });
-    win.webContents.on('focus', () => focusLiveView(view, quitting));
+    // Some window managers emit focus while still minimized; do not restore implicitly.
+    win.on('focus', () => { if (quitting) return; publish(); focusLiveView(view, quitting, !win.isMinimized() && win.isFocused()); });
+    win.webContents.on('focus', () => { if (quitting || win.isDestroyed()) return; focusLiveView(view, quitting, !win.isMinimized() && win.isFocused()); });
     function rememberWindow() {
       clearTimeout(windowTimer); windowTimer = setTimeout(() => {
         if (win.isDestroyed() || win.isMinimized()) return;

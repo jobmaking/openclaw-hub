@@ -112,8 +112,8 @@ function windowBounds(saved, displays) {
 }
 
 // Focus events can arrive while Electron is tearing down WebContentsView.
-function focusLiveView(view, quitting = false) {
-  if (quitting) return false;
+function focusLiveView(view, quitting = false, windowActive = true) {
+  if (quitting || !windowActive) return false;
   const contents = view?.webContents;
   if (!contents || contents.isDestroyed()) return false;
   contents.focus();

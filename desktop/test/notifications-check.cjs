@@ -148,6 +148,7 @@ async function reload() {
     await sleep(1200);
     const approval = { type: 'approval', agentId: 'assistant', sessionKey: 'chat-a', id: 'a-1', phase: 'pending', status: 'pending', title: 'Permiso Linux', allowed: ['allow-once', 'deny'] };
     await local.evaluate('hubDesktop.command("minimize")');
+    await until('minimized before permission delivery', () => local.evaluate('state.minimized'));
     broadcast(approval);
     const permission = await native('Permiso Linux');
     check('a permission requested while minimized reaches Linux', permission.title.includes('pide permiso') && await local.evaluate('state.minimized'));
