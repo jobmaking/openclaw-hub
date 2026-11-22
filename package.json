@@ -1,6 +1,6 @@
 {
   "name": "openclaw-hub",
-  "version": "1.4.19-community.1",
+  "version": "1.4.20-community.1",
   "description": "Self-hosted multi-agent web interface for OpenClaw gateways",
   "main": "server.js",
   "private": true,
@@ -20,7 +20,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "node tools/hub-backend-audit-check.mjs && node tools/hub-artifact-routes-check.mjs && node tools/hub-question-contract-check.mjs && node tools/hub-user-isolation-check.mjs && node tools/hub-paste-local-check.mjs && node tools/hub-voice-routes-check.mjs && node tools/hub-usage-check.mjs && node tools/hub-usage-ui-check.mjs && node tools/hub-model-settings-check.mjs && node tools/hub-skill-review-backend-check.mjs && node tools/hub-skill-review-ui-check.mjs && node tools/hub-mobile-focus-check.mjs && node tools/hub-mobile-keyboard-check.mjs && node tools/hub-question-scroll-check.mjs && node --test test/*.test.cjs",
-    "test:viewer": "node tools/hub-chat-header-actions-check.mjs && node tools/hub-artifact-viewer-check.cjs --media --pc"
+    "test:viewer": "node tools/hub-chat-header-actions-check.mjs && node tools/hub-artifact-viewer-check.cjs --media --pc",
+    "test:zoom": "node tools/hub-artifact-viewer-check.cjs --zoom --pc && node tools/hub-artifact-viewer-check.cjs --zoom"
   },
   "devDependencies": {
     "playwright-core": "1.64.1"

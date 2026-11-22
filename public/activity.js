@@ -411,12 +411,22 @@
   }
   function loadArtifactViewer(){
     if(viewerAssets)return viewerAssets;
-    const sheet=document.createElement('link');sheet.rel='stylesheet';sheet.href='/artifact-viewer.css?v=4';
+    const sheet=document.createElement('link');sheet.rel='stylesheet';sheet.href='/artifact-viewer.css?v=5';
     const css=new Promise((resolve,reject)=>{sheet.onload=resolve;sheet.onerror=reject;});
     document.head.append(sheet);
-    viewerAssets=Promise.all([css,import('./artifact-viewer.mjs?v=5')]).then(([,mod])=>artifactViewer=mod)
+    viewerAssets=Promise.all([css,import('./artifact-viewer.mjs?v=6')]).then(([,mod])=>artifactViewer=mod)
       .catch(error=>{sheet.remove();viewerAssets=null;throw error;});
     return viewerAssets;
+  }
+  async function openChatImage(src,title,node) {
+    const version=navigation, key=currentScope();
+    const stillHere=()=>version===navigation&&key===currentScope();
+    try{
+      const module=await loadArtifactViewer();
+      if(stillHere()&&node.isConnected){
+        module.openChatImage(src,title,()=>stillHere()?(node.isConnected?node:document.getElementById('messages')):null);
+      }
+    }catch{if(stillHere())options.toast?.('No se pudo abrir la imagen.');}
   }
   async function renderWorkArtifact(target, parts, signal) {
     const viewer=await loadArtifactViewer();
@@ -539,7 +549,7 @@
     init(value = {}) { options = { ...options, ...value }; mount(); render(); },
     select, consumeEvent, connection, status, enhanceMessages, openDiagnostics, clearNotices,
     refreshArtifacts: () => loadArtifacts(),
-    setArtifactEditor, revealArtifact, renderWorkArtifact, mediaFormat,
+    setArtifactEditor, revealArtifact, renderWorkArtifact, mediaFormat, openChatImage,
     resetArtifacts(){artifactViewer?.closePreview();artifactCache.clear();void select(null,null);},
     reportError: addDiagnostic,
     guardTerminal(message) {

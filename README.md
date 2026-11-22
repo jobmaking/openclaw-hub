@@ -4,7 +4,7 @@ A self-hosted web interface for your OpenClaw agents. Bring several gateways int
 one place, with streaming chat, conversation history, files and per-user access.
 
 **Independent community project. Not an official OpenClaw product.**
-This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.4.19. The interface is
+This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.4.20. The interface is
 currently Spanish-first. A running OpenClaw gateway and its model configuration
 are required; this repository does not include models, API credits or a gateway.
 
@@ -19,6 +19,8 @@ are required; this repository does not include models, API credits or a gateway.
 - **Work** gathers pending requests, active chats and recent files across the
   agents you can already access. Read PDF, Word and Excel; view images and play
   compatible videos without leaving the conversation or changing the original.
+- Zoom the photo, not the chat: pinch on mobile, use the wheel on desktop,
+  or use the viewer buttons. Drag to pan and choose **Ajustar** to fit again.
 - One **⋯** menu with **Work**, **Doc** and **Skill**. The document editor and
   skill review appear only when enabled for your account and agent.
 - Optional chat-local document drafts, explicit first save and cancel, and
@@ -94,7 +96,9 @@ browser fixture checks clipboard and drag-and-drop recovery. Public CI also cove
 usage, model settings, skill-review authorization, mobile reading space, keyboard
 geometry and touch-scrolling questions. With FFmpeg and Google Chrome installed,
 `CHROMIUM_PATH="$(command -v google-chrome)" npm run test:viewer` adds single-menu
-checks and native playback tests with generated sample media. FFmpeg is for the
+checks and native playback tests with generated sample media. The same setup with
+`npm run test:zoom` checks mouse and emulated touch gestures, with a positive
+control to distinguish image magnification from browser zoom. FFmpeg is for the
 test fixture only; the Hub does not transcode. Emulation does not certify a physical IME.
 They do not use production credentials or call models. CI also builds the Docker
 image. Test fixture credentials and names are synthetic.

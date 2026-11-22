@@ -11,7 +11,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright-core');
 const root=path.resolve(__dirname,'..');
 const keep=Boolean(process.env.HUB_VIEWER_EVIDENCE);
 const linux=process.argv.includes('--electron'), pc=process.argv.includes('--pc'), pdfOnly=process.argv.includes('--pdf-only'), wordOnly=process.argv.includes('--word'), work=process.argv.includes('--work'), appMode=process.argv.includes('--standalone');
-const media=process.argv.includes('--media')||process.env.HUB_FIXTURE_MEDIA==='1';
+const zoom=process.argv.includes('--zoom');
+const media=zoom||process.argv.includes('--media')||process.env.HUB_FIXTURE_MEDIA==='1';
 const proxyNames=['NODE_USE_ENV_PROXY','HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','http_proxy','https_proxy','all_proxy'];
 function cleanEnv(extra={}){
   const env={...process.env,...extra};
@@ -377,12 +378,128 @@ async function mediaSuite(){
   if(fail)process.exitCode=1;
 }
 
+async function zoomSuite(press){
+  const touch=!pc&&!linux;
+  const cdp=await context.newCDPSession(page);
+  const original=await page.evaluate(()=>[state.agent,state.current]);
+  const draft='Borrador que debe sobrevivir al zoom';
+  const gestures=(type,touchPoints)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints});
+  const point=(x,y,id=0)=>({x,y,id,radiusX:3,radiusY:3,force:1});
+  async function pinch(x,y,start,end){
+    const pair=(distance,mid=x)=>[point(mid-distance,y,1),point(mid+distance,y,2)];
+    await gestures('touchStart',pair(start));
+    for(let i=1;i<=9;i++){
+      await gestures('touchMove',pair(start+(end-start)*i/9));await pause(15);
+    }
+    await gestures('touchEnd',[]);
+  }
+  const viewport=()=>page.evaluate(()=>({scale:visualViewport.scale,w:visualViewport.width,app:document.getElementById('app').getBoundingClientRect().width,dpr:devicePixelRatio}));
+  const sameViewport=async before=>assert.deepEqual(await viewport(),before);
+  const messages=page.locator('#messages'), box=await messages.boundingBox(), x=box.x+box.width/2, y=box.y+box.height/2;
+  const before=await viewport();
+  await page.locator('#input').fill(draft);await page.locator('#input').blur();
+  await messages.evaluate(node=>node.scrollTop=0);
+  if(touch){
+    // A control with the restriction removed must actually zoom in this browser.
+    const root=page.locator('html');await root.evaluate(e=>e.style.touchAction='auto');
+    await pinch(x,y,21,85);await until(async()=>(await viewport()).scale>1.2,'positive control: native pinch magnifies the page');
+    await cdp.send('Emulation.setPageScaleFactor',{pageScaleFactor:1});await root.evaluate(e=>e.style.removeProperty('touch-action'));
+    await until(async()=>(await viewport()).scale===before.scale,'native scale restored');
+    await pinch(x,y,21,85);await pause(180);await sameViewport(before);check('two actual touch points zoom the unguarded control, but not the HUB',true);
+    const idle=await messages.evaluate(e=>e.scrollTop);
+    for(let i=0;i<2;i++){await gestures('touchStart',[point(x,y)]);await gestures('touchEnd',[]);await pause(90);}
+    await pause(250);await sameViewport(before);check('rapid double tap does not magnify the main app',true);
+    await gestures('touchStart',[point(x,y)]);
+    for(let i=1;i<=12;i++){await gestures('touchMove',[point(x,y-i*9)]);await pause(16);}
+    await gestures('touchEnd',[]);
+    await until(()=>messages.evaluate((node,prior)=>node.scrollTop>prior+35,idle),'one finger scrolls the chat');
+    check('the normal one-finger swipe still scrolls the history',true);
+    check('coarse-pointer composer does not ask iOS to enlarge a small input',await page.locator('#input').evaluate(e=>parseFloat(getComputedStyle(e).fontSize)>=16));
+  }else{
+    await page.mouse.move(x,y);await page.keyboard.down('Control');await page.mouse.wheel(0,-270);await page.keyboard.up('Control');
+    await pause(200);await sameViewport(before);check('a modified wheel does not zoom the main app',true);
+    await page.mouse.wheel(0,210);await until(()=>messages.evaluate(e=>e.scrollTop>50),'unmodified wheel scrolls chat');
+    check('the normal wheel still scrolls outside the image',true);
+  }
+  check('the viewport does not forbid explicit browser/accessibility zoom',await page.locator('meta[name=viewport]').evaluate(e=>!/(maximum-scale|user-scalable)/.test(e.content)));
+  const imageState=root=>root.locator('.av-media-image').evaluate(img=>{
+    const matrix=new DOMMatrix(getComputedStyle(img).transform), r=img.parentElement.getBoundingClientRect();
+    return {scale:matrix.a,x:matrix.e,y:matrix.f,w:img.offsetWidth,h:img.offsetHeight,boxW:r.width,boxH:r.height};
+  });
+  const scaled=async(root,min)=>until(async()=>{const s=await imageState(root);return s.scale>=min&&s;},'photo scale reaches '+min);
+  const adjusted=async(root)=>{await press(root.getByRole('button',{name:'Ajustar imagen',exact:true}));await until(async()=>(await imageState(root)).scale===1,'photo back to 100%');};
+  async function exercise(root){
+    const stage=root.locator('.av-image-stage'), plus=root.getByRole('button',{name:'Ampliar imagen',exact:true});
+    await plus.waitFor();
+    const initial=await scaled(root,1);
+    check('photo starts at 100% and fits without cropping',initial.scale===1&&initial.w<=initial.boxW&&initial.h<=initial.boxH);
+    check('photo zoom controls stay reachable and at least 44 px',await plus.evaluate(e=>[...e.closest('.av-group').querySelectorAll('button')].every(button=>{
+      const r=button.getBoundingClientRect();return r.width>=44&&r.height>=44&&button.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));
+    })));
+    const b=await stage.boundingBox(), sx=b.x+b.width/2, sy=b.y+b.height/2;
+    if(touch){
+      await pinch(sx,sy,22,106);const enlarged=await scaled(root,4);
+      // CDP ends all existing contacts with touchEnd. Start a genuine
+      // one-finger drag and verify that the preceding pinch has let go.
+      await gestures('touchStart',[point(sx,sy)]);
+      for(let i=1;i<=8;i++){
+        await gestures('touchMove',[point(sx+i*5,sy+i*5)]);await pause(16);
+      }
+      await gestures('touchEnd',[]);
+      await until(async()=>{const s=await imageState(root);return Math.abs(s.x-enlarged.x)>20&&s.scale===enlarged.scale;},'one-finger pan after pinch');
+      check('native pinch enlarges the photo and a one-finger drag pans it',true);
+      await sameViewport(before);check('the viewport scale does not move inside the photo either',true);
+    }else{
+      await page.mouse.move(sx,sy);
+      for(let i=0;i<4;i++)await page.mouse.wheel(0,-128);
+      const enlarged=await scaled(root,3);
+      await page.mouse.down();await page.mouse.move(sx+38,sy+35,{steps:8});await page.mouse.up();
+      await until(async()=>{const s=await imageState(root);return Math.abs(s.x-enlarged.x)>20||Math.abs(s.y-enlarged.y)>20;},'mouse can pan');
+      check('wheel only enlarges the photo and mouse drag pans it',true);
+      await sameViewport(before);
+    }
+    if(keep){
+      const {data}=await cdp.send('Page.captureScreenshot',{format:'png',fromSurface:true});
+      await fs.writeFile(path.join(directory,root===chat?'zoom-chat.png':'zoom-work.png'),Buffer.from(data,'base64'));
+    }
+    await adjusted(root);
+    await press(plus);await scaled(root,1.3);
+    await press(root.getByRole('button',{name:'Reducir imagen',exact:true}));await until(async()=>(await imageState(root)).scale<=1.001,'minus restores initial scale');
+    check('plus, minus and Ajustar work without gestures',true);
+    if(!touch){
+      await root.locator('.av-scroll').focus();await page.keyboard.press('Equal');await scaled(root,1.3);
+      await page.keyboard.press('0');await until(async()=>(await imageState(root)).scale===1,'keyboard reset');
+      check('photo region also responds to keyboard zoom and reset',true);
+    }
+  }
+  const inline=page.locator('#messages .chat-image-open').first();
+  await press(inline);const chat=page.locator('#hub-artifact-viewer[open]');await exercise(chat);
+  await press(chat.getByRole('button',{name:'Cerrar vista previa'}));
+  await chat.waitFor({state:'hidden'});
+  check('the thumbnail viewer returns focus to the same message',await inline.evaluate(el=>el===document.activeElement));
+  if(!await page.locator('#hub-artifacts').evaluate(e=>e.open))await press('#hub-artifacts > summary');
+  const attached=page.locator('#hub-artifacts').getByRole('button',{name:/^Ver imagen:/}).first();
+  await press(attached);await scaled(chat,1);
+  check('Entregables opens at 100% after the chat thumbnail was enlarged', (await imageState(chat)).scale===1);
+  await press(chat.getByRole('button',{name:'Cerrar vista previa'}));await chat.waitFor({state:'hidden'});
+  await press('#hub-chat-more');await press('#btn-pending-questions');await press('#work-tab-review');
+  const card=page.locator('#work-list').getByRole('button',{name:/^Ver imagen ·/}).first();
+  await press(card);const workReader=page.locator('#work-reader');await exercise(workReader);
+  await press('#work-reader-back');await workReader.waitFor({state:'hidden'});
+  check('Work returns to the same focused file row',await card.evaluate(e=>e===document.activeElement));
+  await press('#work-close');await page.locator('#work-inbox').waitFor({state:'hidden'});
+  check('session, draft, and viewport remain intact',JSON.stringify(await page.evaluate(()=>[state.agent,state.current]))===JSON.stringify(original)&&await page.locator('#input').inputValue()===draft);
+  await sameViewport(before);
+  check('no navigation away or JS exception',page.url()===origin+'/'&&!outside.length&&!errors.length);
+  console.log('RESULT '+checks+' PASS · zoom · '+(linux?'Electron Linux':pc?'Chrome PC':'Chrome móvil emulado'));
+}
+
 (async()=>{
   directory=await fs.mkdtemp(path.join(os.tmpdir(),'hub-readonly-viewer-'));
   execFileSync('python3',[path.join(root,'tools/hub-artifact-viewer-fixtures.py'),directory,...(media?['--media']:[])]);
   const httpPort=await port(); origin='http://127.0.0.1:'+httpPort;
   service=spawn(process.execPath,[path.join(root,'tools/hub-documents-preview.cjs'),String(httpPort),path.join(directory,'data')],
-    {env:cleanEnv({HUB_FIXTURE_PREVIEWS:directory,...(work||media?{HUB_FIXTURE_WORK:'1'}:{}),...(media?{HUB_FIXTURE_MEDIA:'1'}:{})}),stdio:['ignore','pipe','pipe']});
+    {env:cleanEnv({HUB_FIXTURE_PREVIEWS:directory,...(work||media?{HUB_FIXTURE_WORK:'1'}:{}),...(media?{HUB_FIXTURE_MEDIA:'1'}:{}),...(zoom?{HUB_FIXTURE_IMAGE_ZOOM:'1'}:{})}),stdio:['ignore','pipe','pipe']});
   service.stderr.on('data',data=>log.push(String(data).trim().slice(0,350)));
   await until(async()=> (await fetch(origin+'/healthz')).ok,'fixture server did not start');
   if(linux){
@@ -440,6 +557,7 @@ async function mediaSuite(){
     await finger.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
     await finger.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
   }
+  if(zoom){await zoomSuite(press);return;}
   if(media){await mediaSuite();return;}
   if(work){
     await page.waitForFunction(()=>window.HubWorkInbox?.enabled());

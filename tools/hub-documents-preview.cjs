@@ -61,6 +61,7 @@ for(const {id,title,mimeType} of readerFixtures){
  files.set(id,{bytes,artifact:{id,type:'artifact',title,mimeType,sizeBytes:bytes.length,download:{mode:'bytes'}}});
 }
 const mediaFixture=process.env.HUB_FIXTURE_MEDIA==='1';
+const zoomFixture=mediaFixture&&process.env.HUB_FIXTURE_IMAGE_ZOOM==='1';
 const mediaFixtures=mediaFixture?viewerManifest.media||[]:[];
 for(const {id,title,mimeType} of mediaFixtures){
  const bytes=fs.readFileSync(path.join(viewerFixtures,title));
@@ -153,11 +154,19 @@ app.get('/manifest.webmanifest',(req,res)=>res.type('application/manifest+json')
     {src:'/icons/hub-v2/icon-512.png',sizes:'512x512',type:'image/png',purpose:'any'}],
 }));
 app.get('/healthz',(req,res)=>res.json({preview:'hub-documents-local-v1',service:'HUB Documentos',status:'ready'}));
-app.get('/api/branding',(req,res)=>res.json({name:'HUB · Prueba',title:'HUB Documentos · Prueba local',emoji:'▤',version:version+' · DEMO',capabilities:{files:false,modelSettings:false,push:false,voice:false,artifacts:true,artifactMedia:mediaFixture,...(workFixture?{workInbox:true}:{})}}));
+app.get('/api/branding',(req,res)=>res.json({name:'HUB · Prueba',title:'HUB Documentos · Prueba local',emoji:'▤',version:version+' · DEMO',capabilities:{files:zoomFixture,modelSettings:false,push:false,voice:false,artifacts:true,artifactMedia:mediaFixture,...(workFixture?{workInbox:true}:{})}}));
 app.get('/api/me',auth,(req,res)=>res.json({user,sessionScope:'own'}));
 app.get('/api/agents',auth,(req,res)=>res.json({agents:[{id:agent,name:'Primary · Simulación',emoji:'📄',connected:true,documentsEnabled:true,models:[model]},...(workFixture?[{id:otherId,name:'Assistant · Ensayo',emoji:'🧰',connected:true,documentsEnabled:true,models:[model]}]:[])]}));
 app.get('/api/sessions',auth,(req,res)=>res.json({sessions:[{...(workFixture&&req.query.agent===otherId?other:session),kind:'session'}],total:1}));
-app.get(['/api/history','/api/history-page'],auth,(req,res)=>res.json(req.query.key===session.key?{sessionId:session.sessionId,hasMore:false,messages}:workFixture&&req.query.key===other.key?{sessionId:other.sessionId,hasMore:false,messages:[{id:'assistant-fixture',role:'assistant',ts:other.updatedAt,text:'El documento exacto del ensayo está en Entregables.'}]}:{}));
+const zoomMessages=zoomFixture?[...Array.from({length:26},(_,i)=>({id:'zoom-line-'+i,role:i%2?'assistant':'user',ts:session.updatedAt-60000+i,text:'Mensaje de ejemplo '+(i+1)+' para desplazar el historial sin alterar el borrador.'})),
+ {id:'zoom-message-image',role:'assistant',ts:session.updatedAt,text:'Foto sintética del chat.'+String.fromCharCode(10)+'MEDIA:media/imagen-en-el-chat.png'}]:messages;
+if(zoomFixture)app.get('/api/files',auth,(req,res)=>{
+ const png=files.get('fixture-media-image');
+ if(!png||req.query.path!=='media/imagen-en-el-chat.png'||req.query.agent!==agent||req.query.key!==session.key)return res.sendStatus(403);
+ if(req.query.dl==='1')res.attachment('imagen-en-el-chat.png');
+ res.type('image/png').send(png.bytes);
+});
+app.get(['/api/history','/api/history-page'],auth,(req,res)=>res.json(req.query.key===session.key?{sessionId:session.sessionId,hasMore:false,messages:zoomMessages}:workFixture&&req.query.key===other.key?{sessionId:other.sessionId,hasMore:false,messages:[{id:'assistant-fixture',role:'assistant',ts:other.updatedAt,text:'El documento exacto del ensayo está en Entregables.'}]}:{}));
 app.get('/api/run-status',auth,(req,res)=>res.json({hasActiveRun:false}));
 app.get('/api/session-settings',auth,(req,res)=>res.json({ok:true,settings:{key:session.key,model:model.id,modelProvider:model.provider}}));
 app.post('/api/logout',auth,(req,res)=>{res.set('Set-Cookie','hubdocs_local=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0');res.json({ok:true});});

@@ -11,7 +11,7 @@
 .work-tabs button[aria-selected=true]{color:#f4f0ff;background:#302c49;border-color:#635789}.work-tabs b{min-width:16px;padding:1px 4px;border-radius:6px;background:#ffffff14;text-align:center;font-size:10px;font-variant-numeric:tabular-nums}
 .work-filter{padding:2px 16px 6px;flex:none}.work-filter input{min-height:44px;width:100%;box-sizing:border-box;border:1px solid #44485a;border-radius:9px;padding:6px 10px;background:#151a24;color:var(--text);font-size:16px;user-select:text}
 .work-status{margin:0;padding:3px 18px 5px;color:#aab2c7;font-size:12px;line-height:1.4;flex:none}.work-status:empty{display:none}
-.work-panel{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:5px 16px 16px;scroll-padding:8px;touch-action:pan-y pinch-zoom}
+.work-panel{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:5px 16px 16px;scroll-padding:8px;touch-action:pan-y}
 .work-list{display:grid;gap:7px}.work-group-title{padding:6px 1px 2px;color:#aeb8d3;font-size:12px;font-weight:650}.work-card{display:flex;align-items:stretch;min-width:0;background:#222737;border:1px solid #3b4257;border-radius:12px;overflow:hidden}.work-inbox .work-card-main{display:grid;grid-template-columns:36px minmax(0,1fr) 12px;align-items:start;gap:9px;text-align:left;flex:1;min-width:0;min-height:62px;padding:10px;background:none;border:0;border-radius:0;color:inherit}.work-card-main:hover{background:#ffffff07}
 .work-description{display:grid;min-width:0;justify-items:start;gap:3px}.work-label{display:block;width:100%;overflow-wrap:anywhere;font-weight:660;font-size:14px;line-height:1.35}.work-meta{display:block;color:#aab2c7;font-size:12px;line-height:1.35;overflow-wrap:anywhere}.work-tag{max-width:100%;color:#c5c4dc;background:#ffffff09;border-radius:5px;padding:2px 5px;font-size:11px;font-weight:500}.work-tag.ready{color:#a1ddd2}.work-tag.active{color:#b9caff}.work-tag.warn{color:#ffcd94;background:#ffb15a12}
 .work-card-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:6px 8px 6px 0}.work-inbox .work-action{min-height:44px;box-sizing:border-box;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;text-align:center;color:#d9d2ff;background:#bdbbff0c;border:1px solid #bdbbff3b;border-radius:8px;font:inherit;font-size:12px;white-space:nowrap;text-decoration:none}.work-inbox .work-action:hover{background:#bdbbff1d}.work-inbox :is(button,a,input):focus-visible,.work-entry:focus-visible{outline:2px solid #c1b4ff;outline-offset:-2px}
@@ -70,7 +70,7 @@
 .work-reader-options p{flex:0 0 100%;font-size:12px;overflow-wrap:anywhere;margin:0 0 3px;color:#d1d8eb;user-select:text}
 .work-reader-status{flex:none;margin:0;padding:7px 14px;font-size:13px;line-height:1.4;color:#c3cbe0;overflow-wrap:anywhere}
 .work-reader-status:empty{display:none}.work-reader-status.av-error{color:#ffcd94}
-.work-reader-body{flex:1;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;background:#151923;user-select:text;touch-action:pan-x pan-y pinch-zoom}
+.work-reader-body{flex:1;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;background:#151923;user-select:text;touch-action:pan-x pan-y}
 .work-reader-body:focus-visible{outline:2px solid #c1b4ff;outline-offset:-2px}
 .work-reader #work-reader-retry{flex:none;align-self:flex-start;margin:0 14px 7px}
 #work-reader-position{font-size:13px;font-weight:650;color:#c9cfe1;text-align:center;white-space:nowrap;font-variant-numeric:tabular-nums}

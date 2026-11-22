@@ -103,6 +103,11 @@ follow and files from conversations you can already access. **Entregables** on
 each chat also opens authorized media. The viewer fits or enlarges images and
 plays video only when requested. It never rewrites the source attachment.
 
+Photos opened from chat, Entregables or Work start fitted to the viewer. Pinch
+and then drag on mobile; on desktop, use the wheel and drag over the image.
+**−**, **+** and **Ajustar** (Fit) also work without gestures. These actions
+do not change the chat scale or the browser's explicit accessibility settings.
+
 The native gateway must report a supported media type. Preview supports PNG,
 JPEG, GIF, WebP and AVIF (up to 24 MiB), plus MP4 and WebM (up to 128 MiB). The
 browser or desktop client must support the codec; MP4 with H.264/AAC is a good

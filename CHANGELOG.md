@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.20-community.1 — 2026-11-22
+
+- Pinch to zoom a photo on mobile, or use the wheel on desktop and Linux.
+  Drag a magnified image to pan. The chat and viewer controls stay in place.
+- Chat thumbnails, Entregables and Work share the same viewer. **−**, **+**
+  and **Ajustar** (Fit) work without gestures. Normal scrolling, explicit
+  browser accessibility zoom and original downloads are preserved.
+- This is a web update; the optional Linux launcher remains 1.0.8-community.1.
+
 ## 1.4.19-community.1 — 2026-11-22
 
 - View images and play compatible videos inside the Hub on web, mobile and

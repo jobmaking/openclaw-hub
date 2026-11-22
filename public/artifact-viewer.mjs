@@ -1,4 +1,5 @@
 import { readBounded } from './artifact-zip.mjs?v=1';
+import { imageZoom } from './artifact-image-zoom.mjs?v=1';
 
 const limits = { pdf: 24 * 1024 * 1024, xlsx: 8 * 1024 * 1024, docx: 2 * 1024 * 1024 };
 const isMedia = kind => kind === 'image' || kind === 'video';
@@ -89,6 +90,17 @@ export async function openPreview(artifact, selection, kind, opener = document.a
   return renderFile(item,artifact,link,kind);
 }
 
+// A thumbnail keeps its existing authorized source; this does not resolve new file paths.
+export function openChatImage(src,title,opener) {
+  const url=new URL(src,location.href);
+  if(url.origin!==location.origin||!['/api/files','/api/session-file'].includes(url.pathname))return;
+  closePreview();
+  const name=String(title||'Imagen del chat').slice(0,180);
+  const download=new URL(url);download.searchParams.set('dl','1');
+  const item=newFrame(name,'image',download.pathname+download.search,name,opener);
+  showMedia(item,{title:name},url.pathname+url.search,'image');
+}
+
 // The work inbox owns the navigation and authorization for each selection.
 // Each render has its own cancellation scope, even though the shell is reused.
 export function renderWorkFile(artifact, link, kind, parts, signal) {
@@ -113,15 +125,11 @@ function showMedia(item,artifact,link,kind){
     notice(item,'El archivo supera el tamaño de la vista previa. Puedes descargar el original.',true);return;
   }
   const stage=create('div','av-media-stage'), element=create(video?'video':'img',video?'av-media-video':'av-media-image');
-  const zoom=video?null:button('Ampliar','Ampliar imagen',()=>{
-    const enlarged=stage.classList.toggle('av-media-zoom');
-    zoom.setAttribute('aria-pressed',String(enlarged));zoom.textContent=enlarged?'Ajustar':'Ampliar';
-    zoom.setAttribute('aria-label',enlarged?'Ajustar imagen':'Ampliar imagen');
-    if(!enlarged)item.scroll.scrollTo(0,0);
-  });
+  const imageScope=video?null:new AbortController();
   let timer, failedOnce=false;
   item.dispose=()=>{
     clearTimeout(timer);
+    imageScope?.abort();
     if(video)element.pause();
     element.removeAttribute('src');
     if(video)element.load();
@@ -139,15 +147,12 @@ function showMedia(item,artifact,link,kind){
   element.addEventListener(video?'loadedmetadata':'load',()=>{
     if(!item.active())return;
     clearTimeout(timer);notice(item,'');
-    if(zoom){
-      zoom.setAttribute('aria-pressed','false');item.tools.append(zoom);item.tools.hidden=false;
-      stage.style.setProperty('--av-image-width',Math.min(4096,Math.max(2*element.naturalWidth,2*item.scroll.clientWidth))+'px');
-    }
+    if(imageScope)imageZoom(stage,element,item.scroll,item.tools,imageScope.signal,button);
   },{once:true,signal});
   async function failed(timedOut=false){
     if(!item.active()||failedOnce)return;
     failedOnce=true;
-    item.dispose();if(zoom){zoom.remove();item.tools.hidden=true;}
+    item.dispose();
     let unavailable=false, tooLarge=false;
     try{
       const probe=await fetch(link,{method:'HEAD',credentials:'same-origin',redirect:'error',cache:'no-store',signal:AbortSignal.any([signal,AbortSignal.timeout(5000)])});

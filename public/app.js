@@ -3017,8 +3017,7 @@ function renderAttachment(f) {
     img.className = 'chat-img';
     img.src = '/api/files?path=uploads/' + encodeURIComponent(f.id);
     img.alt = f.name;
-    img.addEventListener('click', () => lightbox(img.src));
-    return img;
+    return chatImageButton(img);
   }
   const a = document.createElement('a');
   a.className = 'file-card';
@@ -3086,8 +3085,8 @@ function renderRich(container, text, opts = {}) {
       img.className = 'chat-img';
       img.src = fileUrl(p);
       img.loading = 'lazy';
-      img.addEventListener('click', () => lightbox(img.src));
-      container.appendChild(img);
+      img.alt = p.split('/').pop();
+      container.appendChild(chatImageButton(img));
     } else {
       const a = document.createElement('a');
       a.className = 'file-card';
@@ -4001,7 +4000,7 @@ let workInboxAssets=null;
 async function enableWorkInbox(owner){
   if(window.HubCapabilities?.workInbox!==true)return;
   if(!workInboxAssets){
-    const sheet=document.createElement('link');sheet.rel='stylesheet';sheet.href='/work-inbox.css?v=6';
+    const sheet=document.createElement('link');sheet.rel='stylesheet';sheet.href='/work-inbox.css?v=7';
     const script=document.createElement('script');script.src='/work-inbox.js?v=7';
     const load=element=>new Promise((resolve,reject)=>{element.onload=resolve;element.onerror=reject;document.head.append(element);});
     workInboxAssets=Promise.all([load(sheet),load(script)]).catch(()=>{sheet.remove();script.remove();workInboxAssets=null;return false;});
@@ -4299,12 +4298,21 @@ document.addEventListener('keydown', (e) => {
   else closeMsgMenu();
 });
 
-function lightbox(src) {
-  $('lightbox-img').src = src;
-  $('lightbox').classList.remove('hidden');
+function chatImageButton(image) {
+  const button=document.createElement('button');button.type='button';button.className='chat-image-open';
+  button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-label','Ver imagen: '+(image.alt||'Imagen del chat'));
+  button.append(image);
+  button.addEventListener('click',()=>void window.HubActivity?.openChatImage(image.src,image.alt,button));
+  return button;
 }
-$('lightbox').addEventListener('click', () => $('lightbox').classList.add('hidden'));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('lightbox').classList.add('hidden'); });
+
+// Guard pinch gestures, not the browser's explicit zoom commands or normal scroll.
+document.addEventListener('wheel',event=>{
+  if(event.ctrlKey&&event.cancelable&&!$('app').classList.contains('hidden'))event.preventDefault();
+},{passive:false});
+for(const type of ['gesturestart','gesturechange'])document.addEventListener(type,event=>{
+  if(event.cancelable&&!$('app').classList.contains('hidden'))event.preventDefault();
+},{passive:false});
 
 function scrollBottom(force) {
   const box = $('messages');
