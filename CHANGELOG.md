@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.19-community.1 — 2026-11-22
+
+- View images and play compatible videos inside the Hub on web, mobile and
+  the optional Linux client, without navigating away or changing the original.
+- Open Work, Doc and Skill from one chat menu. Work identifies each agent, keeps
+  your place and opens recent attachments without switching conversations.
+- Add the opt-in, chat-scoped Documents editor, explicit save/cancel, and
+  read-only PDF, XLSX and DOCX previews with original downloads.
+- Optional Linux desktop 1.0.8-community.1 adds a reload confirmation when a
+  draft would be lost and keeps the separate community profile and launcher.
+- Bundles only the standalone source, examples, verified renderer assets and
+  local fixtures. Private hosting and API-key billing adapters are not included.
+
 ## 1.3.7-community.1 — 2026-11-19
 
 - Compact mobile metadata into a deliberate menu when the visual viewport is

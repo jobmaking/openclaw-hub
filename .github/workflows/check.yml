@@ -16,6 +16,10 @@ jobs:
       - run: npm ci
       - run: npx playwright-core install --with-deps chromium
       - run: npm test
+      - name: Verify the single menu and actual media playback
+        run: |
+          command -v ffmpeg >/dev/null || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+          CHROMIUM_PATH="$(command -v google-chrome)" npm run test:viewer
       - run: docker compose config --quiet
       - run: docker build -t openclaw-hub:ci .
   desktop-unit:

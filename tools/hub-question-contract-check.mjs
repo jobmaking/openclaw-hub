@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const { WebSocket, WebSocketServer } = require('ws');
+const { header: authenticatedHeader, strip: visibleText } = require('../lib/hub-identity');
 const repo = process.env.HUB_SOURCE_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-question-contract-'));
 const key = 'agent:main:question-contract', markKey = 'agent:secondary:question-contract', sid = 'question-transcript';
@@ -316,7 +317,8 @@ try {
     const result = await api('/api/async-question', { ...responseBody, sourceMessageId: 'forged-source', queueMode: 'interrupt' });
     assert.equal(result.status, 200); assert.equal(result.body.runId, 'accepted-answer'); assert.equal(result.body.sourceSessionId, sid);
     const sent = requests.findLast(request => request.method === 'chat.send').params;
-    assert.equal(sent.message, '> Which delivery?\n\nTwo'); assert.equal(sent.replyToId, 'source-native-pending'); assert.equal(sent.queueMode, 'steer'); assert.equal(sent.deliver, false); assert.equal(sent.sessionId, sid);
+    assert.equal(sent.message.split('\n',1)[0], authenticatedHeader('contract','contract'));
+    assert.equal(visibleText(sent.message), '> Which delivery?\n\nTwo'); assert.equal(sent.replyToId, 'source-native-pending'); assert.equal(sent.queueMode, 'steer'); assert.equal(sent.deliver, false); assert.equal(sent.sessionId, sid);
     assert(!Object.hasOwn(sent, 'asyncQuestionItemId')); assert(!Object.hasOwn(sent, 'followUpMode'));
   });
   await check('current transcript verification never combines offset history with archived selectors', () => {

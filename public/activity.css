@@ -34,3 +34,9 @@
 .ha-copy-fallback{position:fixed;left:-10000px;top:0}
 .s-errors[role=button]:focus-visible{outline:2px solid #78b6ff;outline-offset:2px}
 @media(max-width:640px){.hub-activity,.hub-progress,.hub-artifacts{margin:0 9px 5px;font-size:11px}.ha-summary{padding:7px 9px;gap:6px}.ha-age{display:none}.ha-timeline{max-height:240px}.ha-item-head time{display:none}.ha-diagnostics{width:calc(100vw - 16px);max-height:90dvh}.ha-dialog-head,.ha-dialog-foot,.ha-diagnostics-body{padding:10px}.ha-error-fields{grid-template-columns:minmax(0,1fr);gap:3px}.ha-error-fields dd{margin-bottom:6px}.ha-button{min-height:36px}}
+
+.ha-artifact-actions{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+@media(max-width:640px){.ha-artifact:has(.ha-artifact-edit,.ha-artifact-preview){align-items:stretch;flex-direction:column;gap:5px}.ha-artifact-actions:has(.ha-artifact-edit,.ha-artifact-preview) .ha-button{min-height:44px}}
+
+.ha-artifact.ha-artifact-target{border-color:var(--accent);background:#bdbbff13;border-radius:8px;padding-inline:8px;scroll-margin:8px}
+.ha-artifact.ha-artifact-target:focus{outline:1px solid var(--accent);outline-offset:-1px}

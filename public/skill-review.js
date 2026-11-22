@@ -49,7 +49,10 @@
     if (old) abortReads(old);
     closeReview(false);
     if (ui) { ui.dialog.remove(); ui = null; }
-    if (trigger) { trigger.remove(); trigger = null; }
+    if (trigger) {
+      trigger.remove(); trigger = null;
+      document.dispatchEvent(new Event('hub-skill-action-changed'));
+    }
   }
   function syncScope() {
     const next = context();
@@ -85,10 +88,26 @@
       trigger = button('hub-sr-trigger', '', () => { void openReview(); });
       trigger.id = 'btn-skill-review'; trigger.title = 'Revisar skills';
       trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-controls', 'skill-review-dialog');
-      trigger.append(element('span', 'hub-sr-trigger-label', 'Skills'), element('span', 'hub-sr-badge', '…'));
-      header.prepend(trigger);
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      const path=document.createElementNS(svg.namespaceURI,'path');
+      svg.setAttribute('class','ui-icon hub-sr-trigger-icon');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');
+      svg.setAttribute('hidden','');path.setAttribute('d','M12 2.5 14.4 9.6 21.5 12 14.4 14.4 12 21.5 9.6 14.4 2.5 12 9.6 9.6Z');svg.append(path);
+      trigger.append(svg,element('span', 'hub-sr-trigger-label', 'Skills'), element('span', 'hub-sr-badge', '…'));
     }
+    layoutTrigger();
     renderTrigger();
+  }
+  function layoutTrigger() {
+    if(!trigger)return;
+    const header=document.querySelector('#chat-header .header-right');
+    if(!header)return;
+    const slot=header.closest('[data-work-header]')&&document.getElementById('hub-chat-skill-slot');
+    const labelNode=trigger.querySelector('.hub-sr-trigger-label');
+    const name=slot?'Skill':'Skills';
+    if(labelNode.textContent!==name)labelNode.textContent=name;
+    trigger.querySelector('.hub-sr-trigger-icon').toggleAttribute('hidden',!slot);
+    if(slot){if(trigger.parentNode!==slot)slot.append(trigger);}
+    else if(trigger.parentNode!==header)header.prepend(trigger);
   }
   function renderTrigger() {
     if (!trigger || !owner) return;
@@ -98,8 +117,12 @@
     trigger.dataset.error = String(!!owner.listError);
     trigger.dataset.count = count === null || owner.listError ? '' : String(count);
     trigger.setAttribute('aria-expanded', String(!!ui?.dialog.open));
-    trigger.setAttribute('aria-label', 'Revisar skills: ' + (count === null ? 'recuento no disponible' : count + ' pendientes') + (owner.listError ? '. No se pudo actualizar; abre para ver el error.' : ''));
+    const inMenu=trigger.parentElement?.id==='hub-chat-skill-slot';
+    const detail=(count === null ? 'recuento no disponible' : count + ' pendientes') + (owner.listError ? '. No se pudo actualizar; abre para ver el error.' : '');
+    trigger.setAttribute('aria-label',inMenu?'Skill · Revisar skills':'Revisar skills: '+detail);
+    if(inMenu&&(count!==0||owner.listError))trigger.setAttribute('aria-description',detail);else trigger.removeAttribute('aria-description');
     trigger.title = 'Revisar skills' + (owner.listError ? ' · No se pudo actualizar' : '');
+    document.dispatchEvent(new Event('hub-skill-action-changed'));
   }
 
   async function request(scope, path, options = {}) {
@@ -241,6 +264,7 @@
     const scope = syncScope(); if (!scope) return;
     ensureDialog();
     if (!ui.dialog.open) {
+      if(trigger?.closest('#hub-chat-skill-slot'))document.dispatchEvent(new Event('hub-skill-action-open'));
       ui.previousFocus = document.activeElement;
       renderDetail(); renderList(); renderFooter();
       ui.dialog.showModal(); fitDialog(); ui.close.focus({ preventScroll: true });
@@ -542,7 +566,7 @@
     }
   }
 
-  window.HubSkillReview = Object.freeze({ refresh, open: openReview, close: () => closeReview(true) });
+  window.HubSkillReview = Object.freeze({ refresh, layout:()=>{layoutTrigger();renderTrigger();}, open: openReview, close: () => closeReview(true) });
   window.addEventListener('resize', fitDialog);
   window.visualViewport?.addEventListener('resize', fitDialog);
   window.visualViewport?.addEventListener('scroll', fitDialog);

@@ -4,7 +4,7 @@ A self-hosted web interface for your OpenClaw agents. Bring several gateways int
 one place, with streaming chat, conversation history, files and per-user access.
 
 **Independent community project. Not an official OpenClaw product.**
-This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.3.7. The interface is
+This is the community preview: a standalone **web + optional Linux desktop edition**, based on Hub 1.4.19. The interface is
 currently Spanish-first. A running OpenClaw gateway and its model configuration
 are required; this repository does not include models, API credits or a gateway.
 
@@ -16,6 +16,13 @@ are required; this repository does not include models, API credits or a gateway.
 - Model and reasoning controls using capabilities advertised by your gateway.
 - Blocking and optional questions, tool approvals and reconnect recovery.
 - Uploads, previews and authorized native deliverables.
+- **Work** gathers pending requests, active chats and recent files across the
+  agents you can already access. Read PDF, Word and Excel; view images and play
+  compatible videos without leaving the conversation or changing the original.
+- One **⋯** menu with **Work**, **Doc** and **Skill**. The document editor and
+  skill review appear only when enabled for your account and agent.
+- Optional chat-local document drafts, explicit first save and cancel, and
+  export for supported layouts. [Enable Documents](docs/INSTALL.md#optional-documents).
 - File drag-and-drop recovery, including the Linux desktop X11/XWayland file-drop path.
 - Optional voice notes and spoken replies using a local voice service you operate.
 - Scrypt password hashes, signed login cookies and per-user agent/conversation access.
@@ -68,7 +75,7 @@ troubleshooting: [installation guide](docs/INSTALL.md).
 
 ## Development and checks
 
-Requires Node.js 22 or newer; Node 22 is the container baseline.
+Requires Node.js 22.13 or newer; Node 22 is the container baseline.
 
 ```bash
 npm ci
@@ -85,7 +92,10 @@ user/session isolation, file boundaries, native question contracts and artifacts
 The voice route contract is also tested with an inert local service. An isolated
 browser fixture checks clipboard and drag-and-drop recovery. Public CI also covers
 usage, model settings, skill-review authorization, mobile reading space, keyboard
-geometry and touch-scrolling questions. Emulation does not certify a physical IME.
+geometry and touch-scrolling questions. With FFmpeg and Google Chrome installed,
+`CHROMIUM_PATH="$(command -v google-chrome)" npm run test:viewer` adds single-menu
+checks and native playback tests with generated sample media. FFmpeg is for the
+test fixture only; the Hub does not transcode. Emulation does not certify a physical IME.
 They do not use production credentials or call models. CI also builds the Docker
 image. Test fixture credentials and names are synthetic.
 

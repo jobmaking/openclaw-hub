@@ -79,7 +79,7 @@ rest of `data/`.
 
 ## Node.js without Docker
 
-Node 22 is the baseline. Follow the same `data/` setup and gateway editing in the
+Node 22.13 or newer is required. Follow the same `data/` setup and gateway editing in the
 README, then:
 
 ```bash
@@ -96,6 +96,37 @@ When managing users directly, set `DATA_DIR` to the absolute data directory:
 DATA_DIR="$PWD/data" node manage-users.js set colleague
 ```
 
+## Work, files and media
+
+Use **⋯ → Work** to see pending requests, active conversations, deliveries you
+follow and files from conversations you can already access. **Entregables** on
+each chat also opens authorized media. The viewer fits or enlarges images and
+plays video only when requested. It never rewrites the source attachment.
+
+The native gateway must report a supported media type. Preview supports PNG,
+JPEG, GIF, WebP and AVIF (up to 24 MiB), plus MP4 and WebM (up to 128 MiB). The
+browser or desktop client must support the codec; MP4 with H.264/AAC is a good
+starting point. The original remains available through the download route when
+authorized. No FFmpeg, transcoding service or external viewer is needed at runtime.
+
+## Optional Documents
+
+The editor is off by default. On a trusted installation, the operator can create
+`data/documents-policy.json` with mode `0600`. Replace the example user and agent IDs
+with IDs from that installation. Grants do not bypass conversation permissions.
+
+~~~json
+{"version":1,"enabled":true,"grants":{"colleague":["assistant"]}}
+~~~
+
+Open **⋯ → Doc**. **Guardar documento** or **Guardar copia** performs the first
+save. **Cancelar** discards an unsaved draft; **← Chat** keeps it in that tab.
+Compatible Markdown, plain text and simple Word attachments can be copied into
+the editor without changing the original. Model-assisted proposals also need a
+gateway with isolated document model-run support; ordinary editing does not.
+Back up the complete private data directory, including the document SQLite store.
+To revoke reading as well as editing, remove the relevant grant.
+
 ## Optional skill review and usage
 
 Skill review is disabled unless the user record in private `data/users.json`
@@ -109,7 +140,8 @@ admin privileges just to bypass a rejected request.
 Context consumption, conversation token totals and provider subscription quotas
 are different metrics. Quotas use the OpenAI OAuth/token account configured for
 the selected agent; API-key billing and other accounts are not inferred. Only
-valid native quota windows show inline bars. No percentage means no quota bar;
+valid native quota windows show inline bars. API-key balance integrations are not
+included in this edition. No percentage means no quota bar;
 unknown, partial and old token records are not replaced by guessed zeroes.
 In this version the quota button is also the only entry to token details: when
 there is no valid quota window, the separate token detail is not accessible in

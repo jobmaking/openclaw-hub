@@ -16,10 +16,13 @@ const { GatewayObservability, gatewayRpcError } = require('./lib/gateway-observa
 const { mountSessionBrowse } = require('./lib/session-browse');
 const { mountMessageQueue, readMessageQueue } = require('./lib/message-queue');
 const { mountArtifactRoutes } = require('./lib/artifact-routes');
+const { createDocuments } = require('./lib/documents');
+const { documentEditor } = require('./lib/document-editor');
 const { VoiceRoutes } = require('./lib/voice-routes');
 const { UserAccess } = require('./lib/user-access');
 const { mountUsageRoutes } = require('./lib/usage-routes');
 const { createPublicTenant } = require('./lib/public-tenant');
+const hubIdentity = require('./lib/hub-identity');
 const { mountSkillReview, SKILL_REVIEW_ROUTES } = require('./lib/skill-review');
 const { normalizeBlockingQuestion, blockingQuestionInScope, transcriptIdentity, readAsyncQuestion, AsyncQuestionTracker,
   historyAsyncQuestions, eventQuestionMessage, asyncQuestionForTranscript } = require('./lib/agent-questions');
@@ -526,7 +529,9 @@ class AgentLink {
       }
     }
     if (m.type === 'res' && this.pending.has(m.id)) {
-      const { res } = this.pending.get(m.id); this.pending.delete(m.id); res(m);
+      const pending = this.pending.get(m.id);
+      if (pending.expectModelFinal && m.ok && m.payload?.status === 'accepted') return;
+      this.pending.delete(m.id); pending.res(m);
     } else if (m.type === 'event' && m.event === 'connect.challenge') {
       this.sendConnect(m.payload.nonce);
     } else if (m.type === 'event' && m.event === 'agent') {
@@ -696,13 +701,24 @@ class AgentLink {
     setTimeout(() => { try { this.ws.close(); } catch {} }, 8000);
   }
 
-  req(method, params = {}, timeoutMs = 30000) {
+  documentModelRun(params) {
+    if (publicTenant || this.settingsOnly || !this.gatewayMethods?.has('agent') ||
+        params?.modelRun!==true || params.promptMode!=='none' || params.deliver ||
+        !/^model-run-[a-f0-9-]{36}$/.test(params.sessionId||'') ||
+        params.sessionKey!=='agent:'+this.cfg.gatewayAgentId+':explicit:'+params.sessionId &&
+        params.sessionKey!=='agent:'+(this.cfg.gatewayAgentId||'main')+':explicit:'+params.sessionId) {
+      return Promise.reject(new Error('Invalid isolated document model request'));
+    }
+    return this.req('agent',params,75000,true);
+  }
+
+  req(method, params = {}, timeoutMs = 30000, expectModelFinal = false) {
     return new Promise((res, rej) => {
       if (publicTenant && !publicTenant.validRpc(method, params)) return rej(Object.assign(new Error(publicTenant.error), { code: 'FORBIDDEN' }));
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return rej(Object.assign(new Error(`${this.id} no conectado`), { code: 'GATEWAY_DISCONNECTED', retryable: true }));
       const id = 'r' + (++this.idc);
       const to = setTimeout(() => { this.pending.delete(id); rej(Object.assign(new Error(`timeout ${method} (${this.id}); no se conoce el resultado`), { code: 'GATEWAY_TIMEOUT', method, requestId: id, retryable: true })); }, timeoutMs);
-      this.pending.set(id, { res: (m) => { clearTimeout(to); res(publicTenant ? publicTenant.rpcResponse(method, m, params) : m); }, rej: error => { clearTimeout(to); rej(error); } });
+      this.pending.set(id, { expectModelFinal, res: (m) => { clearTimeout(to); res(publicTenant ? publicTenant.rpcResponse(method, m, params) : m); }, rej: error => { clearTimeout(to); rej(error); } });
       this.ws.send(JSON.stringify({ type: 'req', id, method, params }));
     });
   }
@@ -992,6 +1008,10 @@ app.use('/api', async (req, res, next) => {
   const deny = () => res.status(403).json({ error: 'No tienes acceso a esta conversación o agente', code: 'FORBIDDEN' });
   try {
     if (['/agents', '/push-key', '/push-sub', '/upload'].includes(route)) return next();
+    // The documents router authenticates the exact user, agent and transcript for every operation.
+    if (route === '/documents' || route.startsWith('/documents/')) return !publicTenant ? next() : deny();
+    // The work inbox enumerates all admitted links itself before querying any session.
+    if (route === '/work-inbox' || route === '/work-inbox/track' || route === '/work-inbox/session') return !publicTenant ? next() : deny();
     const source = ['GET', 'HEAD', 'DELETE'].includes(req.method) || route === '/voice/transcribe' ? req.query : (req.body || {});
     if (route === '/files' && String(source.path || '').startsWith('uploads/')) {
       const id = String(source.path).slice('uploads/'.length);
@@ -1036,6 +1056,7 @@ function apiError(res, response, fallback, status = 502) {
 
 const sessionRouteOptions = { getLink, requireAuth, agents: AGENTS, normalizeContent, toolResultPreview,
   authorizeSession: (req, link, key) => access.authorize(req.user, link, key),
+  senderName: user => access.user(user)?.name || user,
   searchSessionKeys: async (req, link) => access.isolationEnabled(link.id) ? (await link.sessions(true)).filter(row => access.canKnown(req.user, link, row.key)).map(row => row.key) : null,
   privateOnly: req => access.privateOnly(req.user, (['GET', 'HEAD', 'DELETE'].includes(req.method) ? req.query : req.body)?.agent),
   diagnosticFromError: (error, context) => observability.diagnostic(error, context) };
@@ -1043,7 +1064,11 @@ const voice = new VoiceRoutes({ ...sessionRouteOptions, dataDir: DATA_DIR });
 sessionRouteOptions.decorateMessage = (req, link, key, message, sessionId, rawMessages) => voice.decorateMessage(req.user, link.id, key, message, sessionId, rawMessages);
 mountSessionBrowse(app, sessionRouteOptions);
 mountMessageQueue(app, sessionRouteOptions);
-mountArtifactRoutes(app, sessionRouteOptions);
+const documents = createDocuments({ dataDir: DATA_DIR, publicTenant, getLink, access, originAllowed: browserOriginAllowed, editor: documentEditor });
+if (!publicTenant) documents.mount(app, requireAuth);
+mountArtifactRoutes(app, { ...sessionRouteOptions, documents, mediaEnabled: !publicTenant });
+require('./lib/work-inbox').mountWorkInbox(app, { enabled: !publicTenant, requireAuth, getLinks: () => [...links.values()], access, documents,
+  sessionKind, activityAt: row => activityAt(row), observe: (agent, key) => observability.snapshot(agent, key), dataDir: DATA_DIR });
 mountUsageRoutes(app, { getLink, requireAuth, access, publicTenant });
 voice.mount(app);
 mountSkillReview(app, { getLink, access, publicTenant, originAllowed: browserOriginAllowed });
@@ -1235,6 +1260,7 @@ async function describeSettings(link, key) {
 
 // Agentes + estado + catálogo de modelos
 app.get('/api/agents', requireAuth, (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.json({
     agents: AGENTS.filter(a => access.canAgent(req.user, a.id)).map(a => {
       const l = getLink(a.id);
@@ -1252,6 +1278,7 @@ app.get('/api/agents', requireAuth, (req, res) => {
         working,
         fileTransport: Array.isArray(a.fileRoots) ? 'mounted' : 'gateway',
         voiceEnabled: !!voice.node(a.id),
+        ...(documents.granted(req.user, a.id) ? { documentsEnabled: true } : {}),
         ...(!publicTenant ? { skillsReviewEnabled: access.canReviewSkills(req.user, a.id), usageEnabled: true } : {}),
         error: l?.connected ? null : (l?.lastError || null),
         // Agentes con modelo fijado a propósito (decisión del dueño): sin selector
@@ -1342,7 +1369,7 @@ async function attachSnippets(l, rows) {
     if (!p || !p.key) continue;
     const items = Array.isArray(p.items) ? p.items : [];
     const usable = (i) => {
-      const t = String(i?.text || '').replace(/\s+/g, ' ').trim();
+      const t = hubIdentity.strip(String(i?.text || '')).replace(/\s+/g, ' ').trim();
       if (t.length < 8) return null;
       // Ruido interno: no identifica nada de la sesión
       if (/^\[(OpenClaw heartbeat|Subagent Task|openclaw)/i.test(t)) return null;
@@ -1624,7 +1651,8 @@ app.get('/api/history', requireAuth, async (req, res) => {
       } catch {}
     }
     const messages = (r.payload?.messages || []).map(m => {
-      const { text, tools } = normalizeContent(m.content);
+      const { text: rawText, tools } = normalizeContent(m.content);
+      const text = m.role === 'user' ? hubIdentity.strip(rawText) : rawText;
       const identity = transcriptIdentity(m);
       // toolResult: no es texto de chat; se sirve como entrada de herramienta
       // (nombre, error y preview corta) para pintarlo en el bloque plegable.
@@ -1881,7 +1909,7 @@ let PANEL_VERSION = 'desconocida';
 try { PANEL_VERSION = fs.readFileSync(path.join(__dirname, 'VERSION'), 'utf8').trim() || 'desconocida'; } catch {}
 
 app.get('/api/branding', (req, res) => res.json({ ...BRANDING, version: PANEL_VERSION,
-  ...(publicTenant ? { capabilities: publicTenant.capabilities } : {}) }));
+    capabilities: publicTenant ? publicTenant.capabilities : { workInbox: true, artifactMedia: true } }));
 app.get('/manifest.webmanifest', (req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1898,7 +1926,7 @@ app.get('/manifest.webmanifest', (req, res) => {
 });
 
 app.use((req, res, next) => { if (!res.hasHeader('Cache-Control')) res.setHeader('Cache-Control', 'no-cache'); next(); });
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { setHeaders:require('./lib/artifact-viewer-headers').artifactViewerHeaders }));
 
 // ---------------------------------------------------------------------------
 // WebSocket con los navegadores
@@ -2318,8 +2346,10 @@ wss.on('connection', (ws, req) => {
         ws.agentId = agentId;
         const idempotencyKey = access.namespaced(u, agentId, JSON.stringify([key, clientMessageId]), 'send');
         const voiceNote = await voice.prepareSend(u, l, key, m.voiceNoteId, idempotencyKey);
+        const sender = access.user(u);
+        const message = hubIdentity.decorate(text, u, sender?.name || u);
         const r = await l.req('chat.send', {
-          sessionKey: key, message: text,
+          sessionKey: key, message,
           attachments: atts.length ? atts : undefined,
           idempotencyKey,
         }, 20000);

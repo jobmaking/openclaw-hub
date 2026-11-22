@@ -1,5 +1,17 @@
 # Hub para Linux
 
+## 1.0.8
+
+- Keep an in-chat Documentos editor with unsaved changes when Hub is reloaded
+  from the menu, `Ctrl+R` or the recovery action. The page's `beforeunload`
+  guard now raises a native confirmation instead of hiding the view and
+  reporting a false connection error.
+- Cancel by default: «Seguir editando» restores the visible webview and its
+  keyboard focus, including Escape handling inside the document editor. Only
+  the explicit «Recargar sin guardar» choice discards the draft.
+- Leave clean reloads, native downloads, saved-file reveal and the sandbox,
+  profile and media permissions unchanged.
+
 ## 1.0.7
 
 - Ignore late focus/activation while closing, including a WebContentsView whose

@@ -12,7 +12,7 @@
   let request = null;
   let artifactRequest = null;
   let artifactReadSequence = 0;
-  let artifactSignalTimer = null;
+  let artifactSignalTimer = null, pickedArtifact = null;
   const artifactRefreshTimers = new Set();
   let localSequence = 0;
   let renderQueued = false;
@@ -291,7 +291,8 @@
     mount(); if (!nodes) return;
     const snapshot = snapshots.get(currentScope());
     nodes.activity.classList.toggle('hidden', !snapshot?.runs?.length);
-    if (!snapshot) { nodes.progress.classList.add('hidden'); nodes.artifacts.classList.add('hidden'); return; }
+    // Artifacts have their own authenticated snapshot and can outlive run telemetry.
+    if (!snapshot) { nodes.progress.classList.add('hidden'); return; }
     const current = status();
     nodes.title.textContent = current?.label || 'Actividad del agente';
     nodes.activity.dataset.status = current?.uncertain ? 'unknown' : current?.status || 'unknown';
@@ -353,7 +354,10 @@
     artifactRefreshTimers.add(timer); return timer;
   }
   async function select(agentId, sessionKey) {
-    mount(); context = { agentId, sessionKey }; const version = ++navigation;
+    mount();
+    if(context.agentId!==agentId||context.sessionKey!==sessionKey)artifactViewer?.closePreview();
+    pickedArtifact = null;
+    context = { agentId, sessionKey }; const version = ++navigation;
     clearArtifactRefreshes();
     request?.abort(); artifactRequest?.abort(); progressSignature = ''; artifactSignature = '';
     if (nodes) { nodes.activity.open = false; nodes.artifacts.open = false; }
@@ -383,10 +387,60 @@
     try {
       const response = await fetch('/api/artifacts?' + new URLSearchParams({ agent: context.agentId, key: context.sessionKey }), { cache: 'no-store', signal: controller.signal });
       const result = await response.json(); if (version !== navigation || key !== currentScope() || controller.signal.aborted || readSequence !== artifactReadSequence) return;
-      artifactCache.set(key, { artifacts: Array.isArray(result.artifacts) ? result.artifacts : [], error: response.ok ? null : result.error });
+      const artifacts=Array.isArray(result.artifacts)?result.artifacts:[];
+      artifactCache.set(key, { sessionId: result.sessionId||null, artifacts, error: response.ok ? null : result.error });
       while (artifactCache.size > 40) artifactCache.delete(artifactCache.keys().next().value);
       renderArtifacts();
+      if(response.ok&&!result.partial || [401,403,404,409].includes(response.status))
+        artifactViewer?.closeMediaIfStale(result.sessionId,artifacts.filter(file=>file.downloadSupported===true&&mediaFormat(file)).map(file=>file.id));
     } catch (error) { if (error.name !== 'AbortError' && version === navigation && key === currentScope() && readSequence === artifactReadSequence) { artifactCache.set(key, { artifacts: [], error: 'No se pudieron consultar los entregables' }); renderArtifacts(); } }
+  }
+  let artifactEditor=null, viewerAssets=null, artifactViewer=null;
+  function mediaFormat(file){
+    return window.HubCapabilities?.artifactMedia===true&&['image','video'].includes(file?.mediaKind)?file.mediaKind:null;
+  }
+  function previewFormat(artifact) {
+    const name=artifact.fileName||artifact.title||'';
+    if(/\.pdf$/i.test(name))return 'pdf';
+    if(/\.xlsx$/i.test(name))return 'xlsx';
+    if(!/\.[^./ ]+$/.test(name)) {
+      if(artifact.mimeType==='application/pdf')return 'pdf';
+      if(artifact.mimeType==='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')return 'xlsx';
+    }
+    return null;
+  }
+  function loadArtifactViewer(){
+    if(viewerAssets)return viewerAssets;
+    const sheet=document.createElement('link');sheet.rel='stylesheet';sheet.href='/artifact-viewer.css?v=4';
+    const css=new Promise((resolve,reject)=>{sheet.onload=resolve;sheet.onerror=reject;});
+    document.head.append(sheet);
+    viewerAssets=Promise.all([css,import('./artifact-viewer.mjs?v=5')]).then(([,mod])=>artifactViewer=mod)
+      .catch(error=>{sheet.remove();viewerAssets=null;throw error;});
+    return viewerAssets;
+  }
+  async function renderWorkArtifact(target, parts, signal) {
+    const viewer=await loadArtifactViewer();
+    signal.throwIfAborted();
+    if(!target.valid())throw new DOMException('Navigation changed','AbortError');
+    return viewer.renderWorkFile(target.file,target.link,target.kind,parts,signal);
+  }
+  function setArtifactEditor(value) {
+    if(artifactEditor?.scope===value?.scope)return;
+    artifactViewer?.closePreview();artifactEditor=value;artifactSignature='';renderArtifacts();
+  }
+  function revealArtifact(id, sessionId, listing) {
+    if (!context.agentId || !context.sessionKey || listing?.sessionId !== sessionId || !Array.isArray(listing.artifacts) ||
+        !listing.artifacts.some(file=>file.id===id && file.downloadSupported===true)) return false;
+    pickedArtifact={id,sessionId};
+    artifactRequest?.abort();artifactReadSequence++;
+    artifactCache.set(currentScope(), { sessionId, artifacts: listing.artifacts, error:null });
+    while (artifactCache.size>40) artifactCache.delete(artifactCache.keys().next().value);
+    artifactSignature='';renderArtifacts();
+    const row=[...nodes.artifactsBody.children].find(node=>node.dataset.artifactId===id);
+    if(!row)return false;
+    nodes.artifacts.open=true;row.tabIndex=-1;
+    requestAnimationFrame(()=>{if(row.isConnected&&pickedArtifact?.id===id){row.focus({preventScroll:true});row.scrollIntoView({block:'nearest'});}});
+    return true;
   }
   function renderArtifacts() {
     if (!nodes) return;
@@ -400,12 +454,58 @@
     if (result.error) { nodes.artifactsBody.append(el('p', 'ha-empty', result.error), button('Reintentar', () => loadArtifacts())); return; }
     for (const artifact of result.artifacts) {
       const row = el('div', 'ha-artifact');
+      row.dataset.artifactId=artifact.id;
+      if(pickedArtifact?.id===artifact.id&&pickedArtifact.sessionId===result.sessionId)row.classList.add('ha-artifact-target');
       const title = artifact.title || artifact.fileName || artifact.name || 'Archivo';
       row.append(el('span', 'ha-artifact-title', title));
       if (artifact.downloadSupported !== false && artifact.id) {
         const link = el('a', 'ha-button', 'Descargar');
         link.href = '/api/artifact-download?' + new URLSearchParams({ agent: context.agentId, key: context.sessionKey, id: artifact.id });
-        link.setAttribute('aria-label', 'Descargar ' + title); link.download = artifact.fileName || title; row.append(link);
+        link.setAttribute('aria-label', 'Descargar ' + title); link.download = artifact.fileName || title;
+        const actions=el('div','ha-artifact-actions');actions.append(link);
+        const editor=artifactEditor;
+        const media=mediaFormat(artifact), format=media||previewFormat(artifact);
+        const selection=media?(result.sessionId?{agent:context.agentId,key:context.sessionKey,sessionId:result.sessionId}:null):editor;
+        if(format&&selection?.agent===context.agentId&&selection.key===context.sessionKey&&selection.sessionId){
+          const label={pdf:'Ver PDF',xlsx:'Ver Excel',image:'Ver imagen',video:'Ver vídeo'}[format];
+          const preview=button(label,async()=>{
+            const scope=currentScope(), version=navigation;
+            const valid=()=>{
+              if(scope!==currentScope()||version!==navigation)return false;
+              if(!media)return artifactEditor===editor;
+              const listing=artifactCache.get(scope);
+              return !listing?.error&&listing?.sessionId===selection.sessionId&&listing.artifacts.some(file=>file.id===artifact.id&&file.downloadSupported===true&&mediaFormat(file)===media);
+            };
+            if(!valid())return;
+            preview.disabled=true;
+            try{
+              const viewer=await loadArtifactViewer();
+              preview.disabled=false;
+              const opener=()=>scope===currentScope()&&version===navigation?preview.isConnected?preview:
+                [...nodes.artifactsBody.children].find(node=>node.dataset.artifactId===artifact.id)?.querySelector('.ha-artifact-preview')||nodes.artifacts.querySelector('summary'):null;
+              if(valid())await viewer.openPreview(artifact,selection,format,opener);
+            }catch{if(valid())options.toast?.('No se pudo abrir la vista previa. Puedes descargar el archivo.');}
+            finally{preview.disabled=false;}
+          },label+': '+title);
+          preview.classList.add('ha-artifact-preview');actions.prepend(preview);
+        }
+        if (editor?.agent===context.agentId && editor.key===context.sessionKey &&
+            /\.(?:docx|md|markdown|txt)$/iu.test(artifact.fileName || title) && (!Number.isFinite(artifact.sizeBytes)||artifact.sizeBytes<=2*1024*1024)) {
+          const edit=button('Abrir en Documentos', async ()=>{
+            if(artifactEditor!==editor)return;
+            edit.disabled=true;
+            try{
+              const opened=await editor.open(artifact,edit);
+              if(opened?.preview&&artifactEditor===editor&&editor.agent===context.agentId&&editor.key===context.sessionKey){
+                const viewer=await loadArtifactViewer();edit.disabled=false;
+                if(artifactEditor===editor)await viewer.openPreview(artifact,editor,'docx',edit,opened.preview);
+              }
+            }catch(error){if(artifactEditor===editor)options.toast?.(error.message||'No se pudo abrir el archivo.');}
+            finally{edit.disabled=false;}
+          },'Abrir en Documentos: '+title);
+          edit.classList.add('ha-artifact-edit');actions.prepend(edit);
+        }
+        row.append(actions);
       } else row.append(el('span', 'ha-empty', artifact.reason || 'Descarga no disponible en el gateway'));
       nodes.artifactsBody.append(row);
     }
@@ -438,6 +538,9 @@
   window.HubActivity = Object.freeze({
     init(value = {}) { options = { ...options, ...value }; mount(); render(); },
     select, consumeEvent, connection, status, enhanceMessages, openDiagnostics, clearNotices,
+    refreshArtifacts: () => loadArtifacts(),
+    setArtifactEditor, revealArtifact, renderWorkArtifact, mediaFormat,
+    resetArtifacts(){artifactViewer?.closePreview();artifactCache.clear();void select(null,null);},
     reportError: addDiagnostic,
     guardTerminal(message) {
       if (message.terminal === false || message.diagnostic?.terminal === false) return false;

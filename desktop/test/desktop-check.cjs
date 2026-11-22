@@ -29,11 +29,48 @@ const checks = [];
 let child, shell, guest, port;
 let log = '';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const isolatedDisplay = ![':0', ':1'].includes((process.env.DISPLAY || '').split('.')[0]);
 function check(label, ok) { checks.push({ label, ok: Boolean(ok) }); console.log((ok ? 'PASS ' : 'FAIL ') + label); if (!ok) throw new Error(label); }
 async function until(label, predicate, limit = 12000) {
   const start = Date.now();
   while (Date.now() - start < limit) { const result = await predicate(); if (result) return result; await sleep(80); }
   throw new Error('Timeout: ' + label);
+}
+function nativeKeys(...keys) {
+  const script = `import sys, time
+from Xlib import X, XK, display
+from Xlib.ext import xtest
+d = display.Display()
+for name in sys.argv[1:]:
+    key = d.keysym_to_keycode(XK.string_to_keysym(name))
+    xtest.fake_input(d, X.KeyPress, key); d.sync(); time.sleep(.05)
+    xtest.fake_input(d, X.KeyRelease, key); d.sync(); time.sleep(.1)
+`;
+  const result = spawnSync('/usr/bin/python3', ['-c', script, ...keys], { env: process.env, encoding: 'utf8' });
+  if (result.status !== 0) throw new Error('Native key input failed: ' + (result.stderr || result.status));
+}
+function unsavedDialog() {
+  const tree = spawnSync('xwininfo', ['-root', '-tree'], { env: process.env, encoding: 'utf8' }).stdout;
+  const line = tree.split('\n').find((entry) => entry.includes('"Cambios sin guardar"'));
+  if (!line) return null;
+  const match = line.match(/(\d+)x(\d+)\+(-?\d+)\+(-?\d+)/);
+  return match ? { width: Number(match[1]), height: Number(match[2]), x: Number(match[3]), y: Number(match[4]) } : null;
+}
+function chooseDialog(button) {
+  const dialog = unsavedDialog();
+  if (!dialog) throw new Error('Unsaved-changes dialog is not visible.');
+  const x = Math.round(dialog.x + dialog.width * (button === 2 ? .75 : .25));
+  const y = Math.round(dialog.y + dialog.height - 40);
+  const script = `import sys, time
+from Xlib import X, display
+from Xlib.ext import xtest
+d = display.Display()
+xtest.fake_input(d, X.MotionNotify, x=int(sys.argv[1]), y=int(sys.argv[2])); d.sync(); time.sleep(.05)
+xtest.fake_input(d, X.ButtonPress, 1); d.sync(); time.sleep(.08)
+xtest.fake_input(d, X.ButtonRelease, 1); d.sync()
+`;
+  const result = spawnSync('/usr/bin/python3', ['-c', script, String(x), String(y)], { env: process.env, encoding: 'utf8' });
+  if (result.status !== 0) throw new Error('Native dialog click failed: ' + (result.stderr || result.status));
 }
 
 const fixture = http.createServer((request, response) => {
@@ -328,6 +365,36 @@ async function stop() {
     await stop(); await sleep(200); await start();
     check('login cookie survives a clean app restart', await guest.evaluate('fetch("/api/me").then(r=>r.json()).then(j=>j.user==="desktop-test")'));
     check('download history survives app restart without signed URLs', (await downloadStates()).length === rowCount && !fs.readFileSync(path.join(profile, 'downloads.json'), 'utf8').includes('http:'));
+    if (isolatedDisplay) {
+      await guest.evaluate(`(() => {
+        window.__hubDirty = true; window.__hubEscape = 0;
+        const editor = document.getElementById('input');
+        editor.value = 'Borrador que no se debe perder';
+        editor.focus();
+        document.addEventListener('keydown', (event) => { if (event.key === 'Escape') window.__hubEscape++; }, true);
+        window.addEventListener('beforeunload', (event) => {
+          if (window.__hubDirty) { event.preventDefault(); event.returnValue = ''; }
+        });
+      })()`);
+      await shell.evaluate('hubDesktop.command("reload")');
+      await until('unsaved changes dialog', () => unsavedDialog());
+      nativeKeys('Escape');
+      await until('draft kept after a cancelled reload', () => guest.evaluate('window.__hubDirty === true && document.getElementById("input").value === "Borrador que no se debe perder"'));
+      // GTK can return focus to the WebContents instead of its previous DOM input
+      // on an unmapped Xvfb window. The data and interactive view are the contract.
+      await until('the native shell restores its ready view', () => shell.evaluate('!state.loading && !state.loadError'));
+      check('a page with unsaved work keeps its content and interactive view when reload is cancelled',
+        await guest.evaluate('document.hasFocus() && window.__hubDirty === true && document.getElementById("input").value === "Borrador que no se debe perder"'));
+      const escapes = await guest.evaluate('window.__hubEscape');
+      nativeKeys('Escape');
+      await until('Escape routed to the webview', () => guest.evaluate('window.__hubEscape > ' + escapes));
+      check('Escape still reaches the in-chat editor after the native guard', true);
+      await shell.evaluate('hubDesktop.command("reload")');
+      await until('unsaved changes dialog again', () => unsavedDialog());
+      chooseDialog(2);
+      await until('explicit reload discards the draft', () => guest.evaluate('typeof uploadFiles === "function" && typeof window.__hubDirty === "undefined"'));
+      check('only the explicit discard choice reloads the page', await shell.evaluate('!state.loading && !state.loadError'));
+    } else console.log('SKIP native unsaved-changes dialog: run under xvfb-run on an isolated display');
     await guest.send('Network.enable');
     await guest.send('Network.emulateNetworkConditions', { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
     await shell.evaluate('hubDesktop.command("reload")');

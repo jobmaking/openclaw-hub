@@ -15,13 +15,16 @@ redistributing binaries or container images. In particular:
 | ws | MIT |
 | web-push | MPL-2.0 |
 | Electron (optional Linux desktop runtime) | MIT, with bundled Chromium/third-party notices |
+| PDF.js (vendored browser renderer) | Apache-2.0, with upstream asset licenses |
 
 Source links: [Express](https://github.com/expressjs/express),
 [Multer](https://github.com/expressjs/multer), [ws](https://github.com/websockets/ws),
 [web-push](https://github.com/web-push-libs/web-push).
 The installed npm packages contain their license files. `npm ci` retrieves them;
 `node_modules` and Docker images are not bundled in this source distribution.
+The locally served [PDF.js distribution](public/vendor/pdfjs-6.5.438/README.md)
+ships unmodified with its license, font/CMap/WASM notices and integrity manifest.
 
 The supplied Hub H-mark icons are generated from the project's geometric SVG
-artwork. No OpenClaw logo, external fonts, customer branding or stock photos are
+artwork. No OpenClaw logo, remote fonts, customer branding or stock photos are
 included in this web edition.

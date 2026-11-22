@@ -9,15 +9,19 @@ const { UserAccess } = require('../lib/user-access');
 const dir = mkdtempSync(join(tmpdir(), 'hub-usage-'));
 const key = 'agent:main:dashboard:test';
 let time = 1800000000000, calls = [], fault = false, mismatch = false, change = false, authFault = false, authUsage = true;
+let failFinalDescription = false;
 let row = { key, agentId: 'main', sessionId: 'session-one', modelProvider: 'openai', model: 'example', updatedAt: 1 };
 const payload = () => ({ updatedAt: time, cacheStatus: { status: 'fresh' }, sessions: [{ ...row, scope: 'instance', usage: { input: 11, output: 7, cacheRead: 3, cacheWrite: 2, totalTokens: 23, totalCost: 999, email: 'SECRET' }, origin: { email: 'SECRET' } }], totals: { totalTokens: 999999 }, creatorOptions: ['SECRET'] });
 const link = { id: 'primary', cfg: { gatewayAgentId: 'main' }, gatewayMethods: new Set(['sessions.usage', 'models.authStatus']), async req(method, params) {
   calls.push([method, params]);
-  if (method === 'sessions.describe') return { ok: true, payload: { session: { ...row } } };
+  if (method === 'sessions.describe') {
+    if (failFinalDescription && calls.at(-2)?.[0] === 'models.authStatus') throw new Error('fixture disconnect');
+    return { ok: true, payload: { session: { ...row } } };
+  }
   if (method === 'models.authStatus') {
     assert.deepEqual(params, { agentId: 'main' });
     if (authFault) throw new Error('SECRET auth email');
-    return { ok: true, payload: { ts: time, providers: [{ provider: 'openai', profiles: [{ type: 'oauth' }, { type: 'api_key' }], accountEmail: 'SECRET', usage: authUsage ? { providerId: 'openai', plan: 'team', accountEmail: 'SECRET', windows: [{ label: '5h', usedPercent: 30, resetAt: time + 1000 }, { label: 'Week', usedPercent: 5, resetAt: time + 2000 }] } : undefined }] }};
+    return { ok: true, payload: { ts: time, providers: [{ provider: 'openai', profiles: [{ type: 'oauth' }, { type: 'api_key' }], accountEmail: 'SECRET', usage: authUsage ? { providerId: 'openai', billing: [{ type: 'balance', unit: 'credits', amount: 12.5, label: 'SECRET' }], plan: 'team', accountEmail: 'SECRET', windows: [{ label: '5h', usedPercent: 30, resetAt: time + 1000 }, { label: 'Week', usedPercent: 5, resetAt: time + 2000 }] } : undefined }] }};
   }
   assert.equal(method, 'sessions.usage');
   assert.deepEqual(params, { key, agentId: 'main', range: 'all', groupBy: 'instance', limit: 1, includeContextWeight: false });
@@ -55,6 +59,25 @@ try {
   assert.equal(a.body.subscription.credentialType,'oauth'); assert.equal(a.body.subscription.plan,'team');
   assert.deepEqual(a.body.subscription.windows.map(w => 100 - w.usedPercent),[70,95]);
   assert.ok(!JSON.stringify(a.body).includes('totalCost')); assert.ok(!JSON.stringify(a.body).includes('accountEmail')); assert.equal(a.headers['Cache-Control'],'no-store');
+  assert.equal(a.body.subscription.creditBalance,12.5);
+  assert.ok(!JSON.stringify(a.body).includes('"billing"'));
+  const provider = { provider:'openai', profiles:[{type:'oauth'}] };
+  const base = {type:'balance',unit:'credits',amount:0};
+  const photo = (billing, overrides={}, session=row) => projectSubscription({ts:time,providers:[{...provider,usage:{providerId:'openai',windows:[],billing},...overrides}]},session);
+  for (const value of [0,0.00002,1,12345.125]) assert.equal(photo([{...base,amount:value}]).creditBalance,value);
+  for (const amount of [-1,NaN,Infinity,null,undefined,'0','12.5',false]) assert.equal(photo([{...base,amount}]).creditBalance,null);
+  for (const invalid of [undefined,null,{},[],[null],[{...base,type:'spend'}],[{...base,type:'budget'}],[{...base,unit:'USD'}],[{...base,currency:'USD'}],[base,base]]) assert.equal(photo(invalid).creditBalance,null);
+  for (const profiles of [[],[{type:'api_key'}],[{type:'oauth'},{type:'token'}]]) assert.equal(photo([base],{profiles}).creditBalance,null);
+  assert.equal(photo([base],{profiles:[{type:'token'}]}).creditBalance,0);
+  for (const override of [{authProfileOverride:'p'},{authProfileId:'p'},{modelProvider:'other'}]) assert.equal(photo([base],{},{...row,...override}).creditBalance,null);
+  assert.equal(photo([base],{usage:{providerId:'other',billing:[base]}}).creditBalance,null);
+  const duplicate = {...provider,usage:{providerId:'openai',windows:[],billing:[base]}};
+  assert.equal(projectSubscription({providers:[duplicate,duplicate]},row).creditBalance,null);
+  assert.deepEqual(photo([base]).windows,[]);
+  failFinalDescription=true;
+  const disconnected=(await request()).body;
+  assert.equal(disconnected.subscription.creditBalance,null); assert.deepEqual(disconnected.subscription.windows,[]);
+  assert.equal(disconnected.tokens.total,null); failFinalDescription=false;
   const beforeCached = calls.filter(([m]) => m === 'sessions.usage').length;
   await request(); assert.equal(calls.filter(([m]) => m === 'sessions.usage').length,beforeCached);
   authUsage = false; assert.equal((await request()).body.subscription.status,'refreshing'); authUsage = true;
@@ -68,7 +91,7 @@ try {
   assert.equal(calls.filter(([m]) => m === 'sessions.usage').length,beforeModelChange + 1);
   time += 6000; fault = true; assert.equal((await request()).body.tokens.status,'unavailable'); fault = false;
   time += 6000; mismatch = true; assert.equal((await request()).body.tokens.total,null); mismatch = false;
-  time += 6000; change = true; assert.equal((await request()).body.tokens.status,'unavailable'); change = false;
+  time += 6000; change = true; const switched=(await request()).body; assert.equal(switched.tokens.status,'unavailable'); assert.equal(switched.subscription.creditBalance,null); change = false;
   time += 6000; link.gatewayMethods.clear(); assert.equal((await request()).body.tokens.status,'ready');
   time += 6000; fault = true; assert.equal((await request()).body.tokens.status,'unavailable'); fault = false;
   const p = payload(); p.cacheStatus.status = 'partial'; assert.equal(projectTokens(p,key,'main',row,time).partial,true);
@@ -97,5 +120,5 @@ try {
   p.sessions[0].scope = 'family'; assert.equal(projectTokens(p,key,'main',row,time).status,'unavailable');
   p.sessions[0].scope = 'instance'; p.sessions[0].agentId = 'other'; assert.equal(projectTokens(p,key,'main',row,time).total,null);
   assert.ok(calls.every(([m]) => ['sessions.describe','sessions.usage','models.authStatus'].includes(m)));
-  console.log('RESULTADO: TODO OK — usage ACL, tenant, exact scope, OAuth quota 70/95, cumulative tokens, cache/coalescing, switch, partial/stale/error, sanitization, no API-key/other-account quota');
+  console.log('RESULTADO: TODO OK — usage ACL, tenant, exact scope, OAuth quota 70/95, scoped credit balance (zero, fractional, absent, ambiguous, reassigned), cumulative tokens, cache/coalescing, switch, partial/stale/error, sanitization, no API-key/other-account quota');
 } finally { rmSync(dir, { recursive: true, force: true }); }

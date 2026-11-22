@@ -25,6 +25,7 @@ else {
   let win, view, settings, records, settingsFile, historyFile, hubSession;
   let shellReady = false, quitting = false, downloadsOpen = process.argv.includes('--downloads');
   let loading = true, loadError = '', findOpen = false, findResult = null, toast = '';
+  let loadToken = 0, reloadPending = false;
   let flushTimer, toastTimer, windowTimer, progressTimer;
   let notifier, notificationTimer, notificationRead = false, notificationEpoch = 0;
   let microphonePrompt = null, microphoneEpoch = 0;
@@ -302,10 +303,21 @@ else {
   }
 
   function loadHub() {
+    const token = ++loadToken;
+    reloadPending = true;
     loading = true; loadError = ''; view.setVisible(false); publish();
     view.webContents.loadURL(target.href).catch(() => {
+      if (token !== loadToken) return;
+      reloadPending = false;
       if (!loadError) { loading = false; loadError = 'No se ha podido conectar con Hub. Comprueba la conexión y vuelve a intentarlo.'; publish(); }
     });
+  }
+
+  function keepPageAfterBlockedReload() {
+    // A beforeunload handler cancelled the navigation. Keep the page (and its
+    // unsaved document) visible instead of reporting a false connection error.
+    loadToken++; reloadPending = false; loading = false; loadError = '';
+    view.setVisible(true); publish(); focusLiveView(view, quitting);
   }
 
   function bindDownloads() {
@@ -550,6 +562,22 @@ else {
         event.preventDefault(); tell('Se ha bloqueado una redirección fuera del chat. Puedes volver al HUB desde su icono.');
         if (loading) { loading = false; loadError = 'Hub ha redirigido a otra página. Vuelve a intentarlo o ábrelo en el navegador.'; publish(); }
       }
+    });
+    // Chromium keeps a page with unsaved work unless the embedder explicitly
+    // discards it. Reload is an ordinary desktop action, so ask first and keep
+    // the editor (and its webview focus) when the person chooses to keep editing.
+    view.webContents.on('will-prevent-unload', (event) => {
+      if (quitting) { event.preventDefault(); return; }
+      if (!reloadPending) { keepPageAfterBlockedReload(); return; }
+      const choice = dialog.showMessageBoxSync(win, {
+        type: 'question', title: 'Cambios sin guardar',
+        message: 'Hay cambios sin guardar en esta página.',
+        detail: 'Si recargas Hub ahora, se perderán los cambios que no hayas guardado. Puedes seguir editando y guardarlos primero.',
+        buttons: ['Seguir editando', 'Recargar sin guardar'],
+        defaultId: 0, cancelId: 0, noLink: true,
+      });
+      if (choice === 1) { reloadPending = false; event.preventDefault(); return; }
+      keepPageAfterBlockedReload();
     });
     view.webContents.on('will-attach-webview', (event) => event.preventDefault());
     view.webContents.on('did-finish-load', () => {

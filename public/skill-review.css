@@ -1,7 +1,7 @@
 /* Isolated Workshop surface: no changes to chat, composer, questions or navigation. */
 #btn-skill-review.hub-sr-trigger {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex: none;
-  min-height: 44px; padding: 7px 11px; border: 1px solid #bdbbff44;
+  padding-inline: 11px; border: 1px solid #bdbbff44;
   background: #bdbbff12; color: var(--text, #f0f1f6); font-size: 12px; font-weight: 600; white-space: nowrap;
 }
 #btn-skill-review.hub-sr-trigger:hover { background: #bdbbff22; border-color: var(--accent, #bdbbff); }
@@ -111,7 +111,6 @@ pre.hub-sr-literal { font-family: ui-monospace, SFMono-Regular, Consolas, monosp
 
 @media (max-width: 650px), (max-height: 480px) {
   #btn-skill-review.hub-sr-trigger { gap: 5px; padding-inline: 8px; }
-  #chat-header:has(.hub-sr-trigger) .header-right { gap: 7px; }
   .hub-sr-dialog { border-radius: 13px; }
   .hub-sr-heading { padding: 14px 14px 12px; gap: 8px; }
   .hub-sr-heading h2 { font-size: 19px; }

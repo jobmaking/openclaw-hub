@@ -292,7 +292,14 @@ async function applyBranding() {
   const brand = document.querySelector('.brand'); if (brand) brand.textContent = `${b.emoji || ''} ${b.name || ''}`.trim();
   // Chip de versión discreto en el pie del sidebar (patrón LengIA)
   const ver = $('sb-version');
-  if (ver && b.version) { ver.textContent = 'v' + b.version; ver.title = 'Panel v' + b.version; ver.classList.remove('hidden'); }
+  if (ver && b.version) {
+    // The local demo can reload just the UI while its WebSocket and drafts stay live.
+    const uiVersion = document.querySelector('meta[name="hub-ui-version"]')?.content;
+    const visibleVersion = uiVersion && typeof b.version === 'string' && b.version.endsWith(' · DEMO') ? uiVersion + ' · DEMO' : b.version;
+    ver.textContent = 'v' + visibleVersion;
+    ver.title = 'Panel v' + b.version + (visibleVersion !== b.version ? ' · Interfaz v' + uiVersion : '');
+    ver.classList.remove('hidden');
+  }
 }
 
 let authenticatedOwner = null;
@@ -306,10 +313,12 @@ async function boot() {
   state.sessionScope = me.sessionScope || 'shared';
   state.sessionScopes = me.sessionScopes || {};
   state.legacyStorageOwner = me.legacyStorageOwner === true;
+  renderQuestionAttention();
   loadUserLocalState();
   $('me-name').textContent = me.user;
   $('login-view').classList.add('hidden');
   $('app').classList.remove('hidden');
+  if(window.HubCapabilities?.workInbox===true)void enableWorkInbox(me.user);
   cleanDrafts();
   connectWs();
   initPush();
@@ -412,6 +421,8 @@ async function loadAgents() {
   const r = await hubFetch('/api/agents').then(r => r.json()).catch(() => null);
   if (!r || !r.agents) return;
   state.agents = r.agents;
+  window.HubWorkInbox?.catalogChanged?.();
+  syncDocuments();
   const busy = Object.fromEntries(r.agents.map(a => [a.id, Math.max(0, Number(a.working) || 0)]));
   // Un envío/turno local recién arrancado no espera a que sessions.list lo
   // confirme para conservar su punto; el servidor manda en cuanto responde.
@@ -420,6 +431,9 @@ async function loadAgents() {
   }
   state.agentBusy = busy;
   window.HubSkillReview?.refresh();
+  // A per-agent permission change must invalidate the current usage scope, not
+  // wait for another selection: HubUsage clears its in-memory photo on mismatch.
+  window.HubUsage?.sync();
   // A private account's filtered catalog is not a dedicated single-agent panel.
   // Keep its agent visible, especially in the empty mobile navigation drawer.
   state.singleAgent = r.agents.length === 1 && (state.sessionScopes[r.agents[0].id] || state.sessionScope) !== 'own';
@@ -463,7 +477,7 @@ function renderAgents() {
   }
 }
 
-async function selectAgent(id, restoreKey = null) {
+async function selectAgent(id, restoreKey = null, exact = null) {
   if (state.agent === id && !restoreKey) { renderAgents(); return; }
   saveDraft();
   const navigationVersion = ++chatNavigationVersion;
@@ -478,6 +492,7 @@ async function selectAgent(id, restoreKey = null) {
   window.HubSkillReview?.refresh();
   reportedFailed.clear();   // cambiar de agente: resetear notificaciones de fallo
   state.current = null;
+  syncDocuments();
   state.historyLoading = false;
   state.pendingFiles = [];
   renderChips();
@@ -516,6 +531,10 @@ async function selectAgent(id, restoreKey = null) {
     // Restore only after the newest read, without erasing the remembered chat.
     listRead = sessionListOperation;
   }
+  if (exact && restoreKey) {
+    if (exact.valid()) await selectSession(restoreKey,{label:exact.title});
+    return;
+  }
   // Un aviso o la última posición pueden apuntar a una sesión de Central.
   // Si no está en la vista general, abrir su pestaña antes de elegir otra.
   if (restoreKey && !state.sessions.some(s => s.key === restoreKey) && state.centralCount > 0) {
@@ -535,6 +554,11 @@ async function selectAgent(id, restoreKey = null) {
 }
 
 function showLogin() {
+  window.HubWorkInbox?.reset();
+  window.HubDocuments?.context(null);
+  window.HubActivity?.resetArtifacts();
+  setWorkHeader(false);
+  window.HubActivity?.setArtifactEditor(null);
   window.HubUsage?.reset();
   window.HubVoice?.reset();
   window.HubQueue?.reset();
@@ -591,12 +615,18 @@ function closeNav() {
   if (wasOpen && history.state?.hubNav) history.back();
 }
 $('btn-nav-back').addEventListener('click', closeNav);
+$('btn-my-work')?.addEventListener('click',()=>{
+  if(!window.HubWorkInbox?.enabled())return;
+  if(isMobile()&&history.state?.hubNav&&document.body.classList.contains('nav-open')){
+    window.addEventListener('popstate',()=>window.HubWorkInbox.open($('btn-menu')),{once:true});closeNav();
+  }else window.HubWorkInbox.open($('btn-my-work'));
+});
 window.addEventListener('popstate', () => {
   if (history.state?.hubNav && isMobile()) {
     document.body.classList.add('nav-open');
     $('scrim').classList.remove('hidden');
     $('btn-menu').setAttribute('aria-expanded', 'true');
-  } else hideNav();
+  } else if(document.body.classList.contains('nav-open'))hideNav();
 });
 $('btn-menu').addEventListener('click', () => {
   document.body.classList.contains('nav-open') ? closeNav() : openNav();
@@ -676,6 +706,7 @@ function connectWs() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.type === 'hello' && m.user && m.user !== state.user) { location.reload(); return; }
     window.HubQueue?.consumeEvent(m);
+    if (['artifacts_changed','sessions','final','aborted','error'].includes(m.type)) window.HubWorkInbox?.invalidate();
     if (window.HubActivity?.consumeEvent(m)) return;
     // Sello de actividad REAL por sesion (delta/tool/phase/observer/usage), NO
     // cualquier mensaje: `sessions`/`agent`/`question`/`approval` llevan
@@ -1693,6 +1724,7 @@ async function selectSession(key, options = {}) {
   historyReadVersions.set(rk(agentId, key), historyVersion);
   const questionEpoch = asyncQuestionEpochs.get(rk(agentId, key));
   state.current = key;
+  syncDocuments(true);
   window.HubVoice?.select(voiceContext());
   window.HubActivity?.select(agentId, key);
   state.historyLoading = true;
@@ -1841,6 +1873,7 @@ function rememberHistoryPage(page, result, older) {
   }
   page.totalMessages = Number.isSafeInteger(result.totalMessages) ? result.totalMessages : null;
   page.sessionId = result.sessionId || page.sessionId || null;
+  if (page.agentId === state.agent && page.key === state.current) syncDocuments(page.focused === true);
   if (result.anchor) page.anchor = result.anchor;
   page.error = null;
 }
@@ -1910,6 +1943,7 @@ function focusHistoryAnchor(page, id) {
 }
 
 function renderEmpty() {
+  syncDocuments(true);
   window.HubUsage?.reset();
   window.HubVoice?.reset();
   window.HubQueue?.select(null, null);
@@ -2173,6 +2207,7 @@ function historyNodes(messages) {
       const meta = document.createElement('div'); meta.className = 'meta';
       if (it.ts) meta.textContent = new Date(it.ts).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
       if (it.id) bubble.el.dataset.historyId = it.id;
+      if (it.historyTruncated===true) bubble.el.dataset.documentPartial='true';
       window.HubVoice?.mountMessage(bubble, it, voiceContext());
       bubble.el.appendChild(meta); fragment.appendChild(bubble.el);
     }
@@ -2799,9 +2834,14 @@ $('btn-send').addEventListener('click', send);
 // Enter: en escritorio envía (Shift+Enter = salto de línea). En móvil NO: el
 // teclado inserta salto de línea y se envía con el botón ➤ (Ctrl/Cmd+Enter envía igual).
 const coarsePointer = () => window.matchMedia('(pointer: coarse)').matches;
+const composerHint = 'Enter para enviar · Shift + Enter para una nueva línea';
+function composerEnterSends(event) {
+  return event.key === 'Enter' && !event.isComposing && event.keyCode !== 229 &&
+    (event.metaKey || event.ctrlKey || (!coarsePointer() && !event.shiftKey));
+}
 function applyComposerHint() {
   $('input').placeholder = 'Escribe…';
-  if ($('composer-hint')) $('composer-hint').textContent = coarsePointer() ? '' : 'Enter para enviar · Shift + Enter para una nueva línea';
+  if ($('composer-hint')) $('composer-hint').textContent = coarsePointer() ? '' : composerHint;
 }
 applyComposerHint();
 
@@ -2816,24 +2856,20 @@ function tipKeyboardOnce() {
 }
 
 $('input').addEventListener('keydown', (e) => {
-  if (e.isComposing || e.keyCode === 229) return;
-  if (e.key !== 'Enter') return;
-  if (!e.metaKey && !e.ctrlKey) {
-    if (coarsePointer()) return;   // móvil táctil: Enter = salto de línea
-    if (e.shiftKey) return;        // escritorio: Shift+Enter = salto de línea
-  }
+  if (!composerEnterSends(e)) return;
   e.preventDefault();
-  send();
+  if (!e.repeat) send();
 });
 $('input').addEventListener('input', () => { autogrow(); saveDraft(); });
-function autogrow() {
-  const t = $('input');
+function autogrow() { fitComposerField($('input')); }
+function fitComposerField(t) {
   const style = window.getComputedStyle(t);
   if (style.fieldSizing === 'content') { t.style.height = ''; return; }
   const limit = Math.max(parseFloat(style.minHeight) || 0, parseFloat(style.maxHeight) || 160);
   t.style.height = 'auto';
   t.style.height = Math.min(t.scrollHeight + 3, limit) + 'px';
 }
+window.HubComposer = Object.freeze({ enterSends: composerEnterSends, fit: fitComposerField, hint: composerHint });
 
 $('btn-stop').addEventListener('click', () => {
   if (!state.current || state.ws?.readyState !== WebSocket.OPEN) { toast('Sin conexión: no se ha confirmado la parada'); return; }
@@ -3827,16 +3863,30 @@ function questionAttentionItems() {
   ].sort((a, b) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
 }
 
-let lastQuestionAnnouncement = '';
+let lastQuestionAnnouncement = '', workPendingCount = 0;
 function renderQuestionAttention() {
   const items = questionAttentionItems();
   const button = $('btn-pending-questions');
   if (!button) return;
-  button.classList.toggle('hidden', !items.length);
-  button.querySelector('.pending-questions-label').innerHTML = String(items.length) + '<span class="pending-questions-word"> ' + (items.length === 1 ? 'pendiente' : 'pendientes') + '</span>';
+  const work = window.HubWorkInbox?.enabled() === true;
+  workPendingCount = work ? items.length : 0;
+  setWorkHeader(work);
+  button.classList.toggle('hidden', !work && !items.length);
+  button.toggleAttribute('data-work', Boolean(work));
+  const label=button.querySelector('.pending-questions-label');
+  button.querySelector('.pending-question-icon').toggleAttribute('hidden',work);
+  button.querySelector('.work-header-icon').toggleAttribute('hidden',!work);
+  button.querySelector('.work-header-name').toggleAttribute('hidden',!work);
+  if(work)label.textContent=items.length>99?'99+':items.length?String(items.length):'';
+  else label.innerHTML = String(items.length) + '<span class="pending-questions-word"> ' + (items.length === 1 ? 'pendiente' : 'pendientes') + '</span>';
   const pendingLabel = items.length === 1 ? '1 pregunta o permiso pendiente.' : items.length + ' preguntas o permisos pendientes.';
-  button.setAttribute('aria-label', pendingLabel + (items.length === 1 ? ' Abrir la solicitud.' : ' Ver pendientes.'));
-  button.title = pendingLabel;
+  button.setAttribute('aria-label', work?'Work · Mi trabajo':pendingLabel + (items.length === 1 ? ' Abrir la solicitud.' : ' Ver pendientes.'));
+  if(work){button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls','work-inbox');}
+  else{button.removeAttribute('aria-haspopup');button.removeAttribute('aria-controls');}
+  if(work&&items.length)button.setAttribute('aria-description',pendingLabel);else button.removeAttribute('aria-description');
+  button.title = work ? (items.length?'Mi trabajo · '+pendingLabel:'Mi trabajo') : pendingLabel;
+  syncChatActions();
+  window.HubWorkInbox?.questions(items);
   for (const chip of document.querySelectorAll('.agent-chip[data-agent-id]')) {
     const count = items.filter(item => item.agentId === chip.dataset.agentId).length;
     let badge = chip.querySelector('.a-pending');
@@ -3904,12 +3954,64 @@ async function openPendingQuestion(item) {
 }
 
 $('btn-pending-questions')?.addEventListener('click', () => {
+  if(window.HubWorkInbox?.enabled()){closeChatActions(true);window.HubWorkInbox.open($('hub-chat-more'));return;}
   const items = questionAttentionItems();
   if (items.length === 1) { openPendingQuestion(items[0]).catch(() => toast('No se pudo abrir la conversación. La solicitud sigue pendiente.')); return; }
   if (!items.length) return;
   renderQuestionInbox(items);
   $('question-inbox').showModal();
 });
+async function readWorkSelection(item, signal) {
+  const q=new URLSearchParams({agent:item.agent,key:item.key,sessionId:item.sessionId});
+  const r=await fetch((item.file?'/api/artifacts':'/api/work-inbox/session')+'?'+q,{signal,cache:'no-store'});
+  const gone='Ese archivo o conversación ya no está disponible. Vuelve a la lista y actualízala.';
+  if(!r.ok)throw Object.assign(Error(r.status===401?'Tu sesión ha caducado. Vuelve a iniciar sesión.':gone),{status:r.status});
+  const listing=await r.json();
+  const file=item.file&&Array.isArray(listing.artifacts)&&listing.artifacts.find(f=>f.id===item.file.id&&f.downloadSupported===true);
+  if(listing.sessionId!==item.sessionId||item.file&&!file)throw Object.assign(Error(gone),{status:listing.partial?503:409});
+  return {listing,file};
+}
+function workPreviewKind(file) {
+  return window.HubActivity?.mediaFormat(file)||/[.](pdf|xlsx|docx)$/iu.exec(file?.fileName||file?.title||'')?.[1].toLowerCase()||null;
+}
+async function readWorkPreview(item, signal) {
+  const owner=state.user, navigation=chatNavigationVersion;
+  const valid=()=>owner===state.user&&navigation===chatNavigationVersion;
+  const readSignal=AbortSignal.any([signal,AbortSignal.timeout(14000)]);
+  const {file}=await readWorkSelection(item,readSignal);
+  readSignal.throwIfAborted();
+  if(!valid())throw new DOMException('Navigation changed','AbortError');
+  const link=item.canDownload?'/api/artifact-download?'+new URLSearchParams({agent:item.agent,key:item.key,sessionId:item.sessionId,id:file.id}):null;
+  return {file,link,kind:workPreviewKind(file),name:item.file.title,valid};
+}
+async function openWorkItem(item, signal) {
+  const owner=state.user, navigation=chatNavigationVersion;
+  const valid=()=>!signal.aborted&&owner===state.user;
+  const {listing}=await readWorkSelection(item,signal);
+  if(!valid()||navigation!==chatNavigationVersion)throw new DOMException('Navigation changed','AbortError');
+  if(state.agent!==item.agent)await selectAgent(item.agent,item.key,{title:item.title,valid});
+  else if(state.current!==item.key||historyPages.get(rk(item.agent,item.key))?.sessionId!==item.sessionId)await selectSession(item.key,{label:item.title});
+  if(!valid()||state.agent!==item.agent||state.current!==item.key)throw new DOMException('Navigation changed','AbortError');
+  if(historyPages.get(rk(item.agent,item.key))?.sessionId!==item.sessionId)throw Error('La conversación ha cambiado. Actualiza la bandeja.');
+  closeNav();
+  if(item.file)return ()=>{if(owner===state.user&&state.agent===item.agent&&state.current===item.key&&historyPages.get(rk(item.agent,item.key))?.sessionId===item.sessionId)window.HubActivity?.revealArtifact(item.file.id,item.sessionId,listing);};
+  return ()=>{const title=$('chat-title');title.tabIndex=-1;title.focus({preventScroll:true});};
+}
+let workInboxAssets=null;
+async function enableWorkInbox(owner){
+  if(window.HubCapabilities?.workInbox!==true)return;
+  if(!workInboxAssets){
+    const sheet=document.createElement('link');sheet.rel='stylesheet';sheet.href='/work-inbox.css?v=6';
+    const script=document.createElement('script');script.src='/work-inbox.js?v=7';
+    const load=element=>new Promise((resolve,reject)=>{element.onload=resolve;element.onerror=reject;document.head.append(element);});
+    workInboxAssets=Promise.all([load(sheet),load(script)]).catch(()=>{sheet.remove();script.remove();workInboxAssets=null;return false;});
+  }
+  if(!await workInboxAssets||owner!==state.user||$('app').classList.contains('hidden'))return;
+  window.HubWorkInbox?.init({name:AGENT_NAME,agents:()=>state.agents,hasChat:()=>Boolean(state.agent&&state.current),questions:questionAttentionItems,openQuestion:openPendingQuestion,openItem:openWorkItem,
+    readPreview:readWorkPreview,renderPreview:(target,parts,signal)=>window.HubActivity.renderWorkArtifact(target,parts,signal),
+    previewKind:workPreviewKind,pendingKey:pendingItemKey,toast});
+  window.HubWorkInbox?.setAccount(owner);renderQuestionAttention();
+}
 $('question-inbox-close')?.addEventListener('click', () => $('question-inbox').close());
 $('question-inbox')?.addEventListener('click', event => {
   if (event.target !== event.currentTarget) return;
@@ -4039,10 +4141,34 @@ async function copyText(text, okMsg) {
   }
 }
 
+function convertibleResponse(el){
+  return !!(el?.matches('.msg.assistant:not(.streaming):not(.thinking)') && $('messages').contains(el) && el!==state.streamBubble?.el);
+}
+function responseForDocument(el){
+  const body=el.firstElementChild;if(!body)return '';
+  const copy=body.cloneNode(true);
+  copy.querySelectorAll('.ha-block-actions,.async-question,.voice-player,button,audio,video').forEach(n=>n.remove());
+  copy.querySelectorAll('br').forEach(n=>n.replaceWith(document.createTextNode('\n')));
+  copy.querySelectorAll('td,th').forEach(n=>n.append('\t'));
+  copy.querySelectorAll('h1,h2,h3,h4,h5,h6,p,pre,blockquote').forEach(n=>n.append('\n\n'));
+  copy.querySelectorAll('li,tr').forEach(n=>n.append('\n'));
+  return (copy.textContent||'').trim();
+}
+async function copyResponseToDocument(el,fragment,onReady){
+  if(!documentsContext().enabled||!convertibleResponse(el))return false;
+  try {
+    if(!fragment && el.dataset.documentPartial==='true')throw Error('Esta respuesta se muestra recortada. Pasa solo el fragmento que quieras conservar.');
+    const text=fragment||responseForDocument(el);
+    if(!text.trim())throw Error('Esta respuesta no contiene texto para Documentos.');
+    return await withDocuments(editor=>editor.seed(text,onReady));
+  } catch(error){toast(error.message||'No se pudo abrir la respuesta en Documentos.');return false;}
+}
 function openMsgMenu(el, x, y) {
   MENU.el = el;
   MENU.openedAt = Date.now();
   const m = $('msg-menu');
+  const convert = m.querySelector('[data-act=documents]');
+  if (convert) convert.hidden = !convertibleResponse(el) || !documentsContext().enabled;
   m.classList.remove('hidden');
   $('scrim-menu').classList.remove('hidden');
   // Anclado a la BURBUJA, no al dedo: debajo si cabe, si no encima, y siempre a
@@ -4077,6 +4203,8 @@ function enterSelectMode(el) {
     sel.addRange(range);
   } catch {}
   const bar = $('sel-bar');
+  const toDocument=bar.querySelector('[data-act=documents-sel]');
+  if(toDocument)toDocument.hidden=!convertibleResponse(el)||!documentsContext().enabled;
   bar.classList.remove('hidden');
   // Cerca del texto seleccionado, no perdida arriba del todo
   const place = () => {
@@ -4113,6 +4241,7 @@ $('msg-menu').addEventListener('click', (e) => {
   const el = MENU.el;
   if (act === 'copy' && el) { copyText(msgText(el), '📋 Mensaje copiado'); closeMsgMenu(); }
   else if (act === 'select' && el) { closeMsgMenu(); enterSelectMode(el); }
+  else if (act === 'documents' && el) { closeMsgMenu(); void copyResponseToDocument(el); }
   else closeMsgMenu();
 });
 $('sel-bar').addEventListener('click', (e) => {
@@ -4122,6 +4251,11 @@ $('sel-bar').addEventListener('click', (e) => {
     const el = document.querySelector('.msg.selecting');
     copyText(sel || (el ? msgText(el) : ''), '📋 Copiado');
     if (sel) exitSelectMode();
+  } else if (act === 'documents-sel') {
+    const sel=window.getSelection(),el=document.querySelector('.msg.selecting');
+    const fragment=el&&sel?.anchorNode&&sel.focusNode&&el.contains(sel.anchorNode)&&el.contains(sel.focusNode)?String(sel).trim():'';
+    if(!fragment){toast('Selecciona el fragmento que quieres pasar');return;}
+    exitSelectMode();void copyResponseToDocument(el,fragment);
   } else if (act === 'done') exitSelectMode();
 });
 // Estando en modo selección, el resto de la pantalla solo cierra el modo al tocar
@@ -4217,6 +4351,87 @@ function scheduleStreamRender() {
   }, 150);   // throttle: como mucho ~7 re-renders/seg durante el stream
 }
 
+function setWorkHeader(enabled) {
+  const header=$('chat-header');
+  if(header.hasAttribute('data-work-header')===enabled)return;
+  closeChatActions();
+  header.toggleAttribute('data-work-header',enabled);
+  const work=$('btn-pending-questions');
+  if(enabled)$('hub-chat-work-slot').append(work);
+  else header.querySelector('.header-right').prepend(work);
+  syncDocumentHeaderLabel();
+  window.HubSkillReview?.layout?.();
+  syncChatActions();
+}
+function syncDocumentHeaderLabel() {
+  const internal=$('chat-header').hasAttribute('data-work-header');
+  const name=internal?'Doc':'Documentos', entry=$('hub-documents-entry'), trigger=$('hub-documents-trigger');
+  const slot=$('hub-chat-doc-slot'), more=$('hub-chat-more');
+  if(internal&&entry.parentNode!==slot)slot.append(entry);
+  else if(!internal&&entry.parentNode===slot)more.before(entry);
+  if(trigger&&trigger.parentNode!==entry.parentNode)entry.before(trigger);
+  for(const id of ['hub-documents-entry','hub-documents-trigger']){
+    const button=$(id);if(!button)continue;
+    const label=button.querySelector('span');if(label.textContent!==name)label.textContent=name;
+    button.setAttribute('aria-label',internal?'Doc · Editar documento':name);
+    button.title=internal?'Editar un documento de este chat':name;
+  }
+}
+function closeChatActions(restore=false) {
+  const menu=$('hub-chat-actions'),more=$('hub-chat-more');
+  if(menu.hidden)return;
+  menu.hidden=true;more.setAttribute('aria-expanded','false');
+  if(restore&&!more.hidden)more.focus({preventScroll:true});
+}
+function syncChatActions() {
+  const more=$('hub-chat-more'), model=$('hub-chat-model'), badge=$('hub-chat-work-count'), nav=$('btn-menu');
+  const enabled=$('chat-header').hasAttribute('data-work-header');
+  const settings=$('session-overview');
+  const hasModel=enabled&&Boolean(settings.querySelector('.model-summary:not(.hidden),.ctx-meter:not(.hidden),.usage-open:not([hidden])'));
+  const review=enabled&&$('hub-chat-skill-slot').querySelector('#btn-skill-review');
+  const count=review?Number(review.dataset.count):0;
+  const pending=Number.isSafeInteger(count)&&count>0;
+  const warning=hasModel&&$('app').classList.contains('viewport-compact')&&Boolean(settings.querySelector('.ctx-meter.warn,.ctx-meter.danger,.model-summary.error'));
+  model.hidden=!hasModel;
+  model.toggleAttribute('data-warning',warning);
+  nav.toggleAttribute('data-model-warning',warning);
+  for(const button of [model,nav]){
+    if(warning)button.setAttribute('aria-description','Hay un aviso de modelo o contexto');
+    else button.removeAttribute('aria-description');
+  }
+  const work=enabled?workPendingCount:0;
+  const hint=[work?work+(work===1?' pregunta o permiso pendiente':' preguntas o permisos pendientes'):'',
+    pending?count+(count===1?' propuesta de skill pendiente':' propuestas de skills pendientes'):''].filter(Boolean).join('. ');
+  const shown=work>99?'99+':work?String(work):'';
+  if(badge.textContent!==shown)badge.textContent=shown;
+  badge.hidden=!shown;
+  more.toggleAttribute('data-skill-pending',pending);
+  more.title=hint?'Más acciones · '+hint:'Más acciones';
+  if(hint)more.setAttribute('aria-description',hint);else more.removeAttribute('aria-description');
+  if(!enabled)closeChatActions();
+  more.hidden=!enabled;
+}
+$('hub-chat-more').addEventListener('click', event=>{
+  const menu=$('hub-chat-actions');
+  if(menu.hidden){menu.hidden=false;event.currentTarget.setAttribute('aria-expanded','true');event.currentTarget.focus({preventScroll:true});}
+  else closeChatActions(true);
+});
+function dismissOutsideChatActions(event) {
+  if(!$('hub-chat-more').contains(event.target)&&!$('hub-chat-actions').contains(event.target))closeChatActions();
+}
+document.addEventListener('pointerdown',dismissOutsideChatActions,true);
+document.addEventListener('focusin',dismissOutsideChatActions);
+window.addEventListener('popstate',()=>closeChatActions());
+document.addEventListener('keydown',event=>{
+  if(event.key!=='Escape'||event.isComposing||$('hub-chat-actions').hidden)return;
+  event.preventDefault();event.stopImmediatePropagation();closeChatActions(true);
+},true);
+document.addEventListener('hub-skill-action-changed',syncChatActions);
+document.addEventListener('hub-skill-action-open',()=>closeChatActions(true));
+$('hub-chat-doc-slot').addEventListener('click',event=>{
+  if(event.target.closest('button'))closeChatActions(true);
+},true);
+
 // Fit the visual viewport, not the layout viewport that Android may keep behind its keyboard.
 (() => {
   const vv = window.visualViewport;
@@ -4226,11 +4441,30 @@ function scheduleStreamRender() {
   const setOverview = open => {
     overview.classList.toggle('expanded', open);
     overviewToggle.setAttribute('aria-expanded', String(open));
+    $('hub-chat-model').setAttribute('aria-expanded',String(open));
   };
   overviewToggle.addEventListener('click', () => { setOverview(!overview.classList.contains('expanded')); schedule(); });
+  $('hub-chat-model').addEventListener('click',()=>{
+    const scope=rk(state.agent,state.current);
+    const unwind=isMobile()&&document.body.classList.contains('nav-open')&&history.state?.hubNav;
+    const reveal=()=>{
+      if(scope!==rk(state.agent,state.current)||app.classList.contains('hidden')||document.body.classList.contains('nav-open'))return;
+      const controls=$('model-controls');
+      setOverview(true);
+      if(!controls.classList.contains('hidden')){controls.classList.add('expanded');renderModelSummary();}
+      const target=[...overview.querySelectorAll('#model-summary,select,#btn-usage')].filter(node=>!node.disabled&&node.getClientRects().length&&getComputedStyle(node).visibility==='visible');
+      const control=target.find(node=>node.matches('select'))||target[0]||$('hub-chat-more');
+      if(overview.contains(control))control.scrollIntoView({block:'nearest',inline:'nearest'});
+      control.focus({preventScroll:true});schedule();
+    };
+    // The drawer's history entry must unwind before focus leaves the chat's upper controls.
+    if(unwind)window.addEventListener('popstate',()=>requestAnimationFrame(reveal),{once:true});
+    closeNav();if(!unwind)requestAnimationFrame(reveal);
+  });
   overview.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || event.isComposing || !app.classList.contains('viewport-compact')) return;
-    setOverview(false); overviewToggle.focus(); schedule();
+    event.preventDefault();
+    setOverview(false); ($('hub-chat-more').hidden?overviewToggle:isMobile()?$('btn-menu'):$('hub-chat-model')).focus({preventScroll:true}); schedule();
   });
   const variable = (name, value) => {
     if (app.style.getPropertyValue(name) !== value) app.style.setProperty(name, value);
@@ -4244,6 +4478,7 @@ function scheduleStreamRender() {
     frame = null;
     if (!isMobile() && !coarsePointer()) {
       app.classList.remove('viewport-fit', 'viewport-compact');
+      syncChatActions();
       app.style.height = ''; app.style.transform = '';
       for (const name of ['--hub-visual-height', '--hub-visual-top']) document.documentElement.style.removeProperty(name);
       for (const name of ['--editor-max-height', '--session-panels-max-height', '--composer-extra-max-height', '--model-settings-max-height', '--question-editor-max-height', '--overview-max-height']) app.style.removeProperty(name);
@@ -4266,6 +4501,7 @@ function scheduleStreamRender() {
     // Do not hide a focused select/field when the browser opens its keyboard.
     if (compact && !app.classList.contains('viewport-compact') && overview.contains(document.activeElement)) setOverview(true);
     app.classList.add('viewport-fit'); app.classList.toggle('viewport-compact', compact);
+    syncChatActions();
     variable('--overview-max-height', Math.max(44, Math.floor(height * (height <= 340 ? 0.20 : 0.36))) + 'px');
     const warning = $('ctx-meter').matches('.warn, .danger') ? $('ctx-text').textContent : '';
     overviewToggle.setAttribute('aria-label', 'Modelo, esfuerzo y consumo' + (warning ? '. ' + warning : ''));
@@ -4387,6 +4623,7 @@ document.addEventListener('input', (e) => {
 
 window.HubActivity?.init({
   copy: copyText,
+  toast,
   markdown: mdBlocks,
   openSession: (agentId, key) => agentId === state.agent ? selectSession(key) : selectAgent(agentId, key),
   onClearErrors: () => { state.errors = []; },
@@ -4418,9 +4655,61 @@ window.HubUsage?.init({
   context: () => {
     const s = modelSettings.get(rk(state.agent, state.current)) || state.sessions.find(s => s.key === state.current);
     return { user: state.user, agent: state.agent, key: state.current, enabled: curAgent()?.usageEnabled === true,
+      apiBalanceEnabled: curAgent()?.apiBalanceEnabled === true,
       provider: s?.modelProvider || null, model: s?.model || null };
   },
 });
+// The document module and stylesheet load only for a granted, current conversation.
+let documentAssets = null;
+function documentsContext(forceHidden = false) {
+  const page = historyPages.get(rk(state.agent,state.current));
+  const sessionId = !forceHidden && !page?.focused ? page?.sessionId : null;
+  return {user:state.user,agent:state.agent,key:state.current,sessionId,enabled:Boolean(sessionId && state.user && curAgent()?.documentsEnabled === true)};
+}
+function syncDocuments(forceHidden = false) {
+  const context=documentsContext(forceHidden);
+  const entry=$('hub-documents-entry');
+  const ownedFocus=$('hub-chat-doc-slot').contains(document.activeElement);
+  if(entry)entry.hidden=!context.enabled || Boolean(window.HubDocuments);
+  window.HubDocuments?.context(context);
+  syncDocumentHeaderLabel();
+  if(!context.enabled&&ownedFocus)closeChatActions(true);
+  window.HubActivity?.setArtifactEditor(context.enabled ? {
+    scope:JSON.stringify([context.user,context.agent,context.key,context.sessionId]),agent:context.agent,key:context.key,sessionId:context.sessionId,
+    open:(artifact,opener)=>withDocuments(editor=>editor.importArtifact(artifact,opener)).catch(error=>toast(error.message||'No se pudo abrir el archivo')),
+  } : null);
+}
+function loadDocuments() {
+  if(window.HubDocuments)return Promise.resolve(window.HubDocuments);
+  if(documentAssets)return documentAssets;
+  const sheet=document.createElement('link');sheet.rel='stylesheet';sheet.href='/documents.css?v=9';
+  const script=document.createElement('script');script.src='/documents.js?v=12';script.async=true;
+  documentAssets=new Promise((resolve,reject)=>{
+    const failed=()=>{sheet.remove();script.remove();documentAssets=null;reject(Error('No se pudo cargar Documentos'));};
+    sheet.onerror=script.onerror=failed;
+    script.onload=()=>{if(!window.HubDocuments){failed();return;}syncDocuments();resolve(window.HubDocuments);};
+  });
+  document.head.append(sheet,script);
+  return documentAssets;
+}
+async function withDocuments(fn) {
+  const here=documentsContext();
+  if(!here.enabled)return null;
+  const editor=await loadDocuments();
+  const now=documentsContext();
+  if(!now.enabled || now.user!==here.user || now.agent!==here.agent || now.key!==here.key || now.sessionId!==here.sessionId)return null;
+  return fn(editor);
+}
+$('hub-documents-entry').addEventListener('click',()=>{const entry=$('hub-documents-entry');
+  const more=entry.closest('#hub-chat-actions')?$('hub-chat-more'):null;
+  const focused=document.activeElement===entry;
+  void withDocuments(editor=>{
+    if(focused&&!more)$('hub-documents-trigger')?.focus({preventScroll:true});
+    editor.open(more||document.activeElement);
+  }).catch(()=>toast('No se pudo abrir Documentos'));
+});
+window.addEventListener('hub-documents-export',()=>window.HubActivity?.refreshArtifacts?.());
+window.addEventListener('hub-documents-parked',()=>toast('Borrador conservado en esta pestaña.'));
 function voiceContext() {
   return { user: state.user, agent: state.agent, key: state.current, voiceEnabled: curAgent()?.voiceEnabled === true,
     sessionId: historyPages.get(rk(state.agent, state.current))?.sessionId || null };

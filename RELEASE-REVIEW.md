@@ -3,6 +3,17 @@
 Repository: https://github.com/jobmaking/openclaw-hub
 License: MIT. Publication authorized by the project owner on 2026-10-19.
 
+## 1.4.19 candidate review
+
+- Web 1.4.19-community.1 and optional Linux desktop 1.0.8-community.1 source.
+- Include Work, opt-in Documents and local image/video previews without
+  operational data, runtime accounts, hosting or private billing adapters.
+- Pin PDF.js assets and preserve their upstream notices. Check the extracted
+  source and executable modes, independent installer/profile, CI and anonymous
+  download. Native media fixtures run offline after dependencies are installed.
+- A physical mobile device or a gateway from another installation is not
+  certified by the loopback browser tests.
+
 ## 1.3.7 candidate review
 
 - Web 1.3.7-community.1 and optional Linux desktop 1.0.7-community.1 source.

@@ -27,7 +27,7 @@ body {
 }
 /* ...pero los campos de texto SÍ se seleccionan (si no, no se puede ni corregir
    lo que escribes ni copiar de un input). */
-#input, .login-card input, .s-filter, .model-select {
+.composer-field, .login-card input, .s-filter, .model-select {
   -webkit-user-select: text; user-select: text; -webkit-touch-callout: default;
 }
 button {
@@ -615,19 +615,19 @@ button.tb-head:hover { color: var(--text); }
 .chip .x { cursor: pointer; color: var(--muted); }
 .chip .x:hover { color: var(--danger); }
 .composer-row { display: flex; align-items: flex-end; gap: 8px; }
-#input {
-  flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+.composer-field {
+  flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
   color: var(--text); padding: 10px 12px; font: inherit; resize: none;
   min-height: 41px; max-height: 160px; line-height: 1.35;
   field-sizing: content;          /* auto-size nativo (Chrome 123+, FF 132+) */
   overflow-y: auto;
   scrollbar-width: none;          /* Firefox: sin barra visible */
 }
-#input::-webkit-scrollbar { display: none; }  /* Chrome: nunca mostrar flechas */
-#input:focus { outline: 1px solid var(--accent); }
-#btn-send { background: var(--accent); border: none; padding: 8px 16px; }
-#btn-send:hover { background: var(--accent2); }
-#btn-send:disabled { background: var(--bg3); color: var(--muted); cursor: default; }
+.composer-field::-webkit-scrollbar { display: none; }  /* Chrome: never show scroll arrows */
+.composer-field:focus { outline: 1px solid var(--accent); }
+.composer-send { background: var(--accent); border: none; padding: 8px 16px; }
+.composer-send:hover { background: var(--accent2); }
+.composer-send:disabled { background: var(--bg3); color: var(--muted); cursor: default; }
 #btn-stop { background: var(--danger); border: none; padding: 8px 14px; }
 #btn-attach { padding: 8px 12px; }
 
@@ -701,9 +701,9 @@ button.tb-head:hover { color: var(--text); }
     padding-bottom: calc(8px + env(safe-area-inset-bottom));
   }
   /* 16px evita el zoom automático de iOS al enfocar el campo */
-  #input { font-size: 16px; padding: 11px 12px; min-height: 44px; }
+  .composer-field { font-size: 16px; padding: 11px 12px; min-height: 44px; }
   /* Targets táctiles cómodos (mínimo 44px) */
-  #btn-send, #btn-stop, #btn-attach { min-width: 46px; min-height: 44px; padding: 8px 12px; font-size: 17px; }
+  .composer-send, #btn-stop, #btn-attach { min-width: 46px; min-height: 44px; padding: 8px 12px; font-size: 17px; }
   .session-item { --pad: 8px; padding: 8px 4px 8px calc(var(--pad) + var(--ind)); gap: 6px; }
   .session-item .s-tw { width: 44px; }
   .s-toggle { width: 44px; height: 44px; }

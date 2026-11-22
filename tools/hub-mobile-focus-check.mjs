@@ -21,13 +21,15 @@ const snapshot = { connected: true, hasActiveRun: false, updatedAt: now,
 const app = express(); app.use(express.json());
 app.get('/api/branding', (req, res) => res.json({ name: 'Hub', version: 'fixture' }));
 app.get('/api/me', (req, res) => res.json({ user: 'mobile-focus-fixture', name: 'Fixture' }));
-app.get('/api/agents', (req, res) => res.json({ agents: [{ id: 'primary', name: 'Primary', connected: true, usageEnabled: true, skillsReviewEnabled: true, voiceEnabled: true, models: [{ id: 'gpt-6-astra', ref: 'openai/gpt-6-astra', name: 'gpt-6-astra', provider: 'openai', thinkingLevels: ['low', 'medium', 'high'] }] }] }));
+app.get('/api/agents', (req, res) => res.json({ agents: [{ id: 'primary', name: 'Primary', connected: true, usageEnabled: true, skillsReviewEnabled: true, documentsEnabled: req.get('x-hub-header-fixture') === 'documents', voiceEnabled: true, models: [{ id: 'gpt-6-astra', ref: 'openai/gpt-6-astra', name: 'gpt-6-astra', provider: 'openai', thinkingLevels: ['low', 'medium', 'high'] }] }] }));
 app.get('/api/sessions', (req, res) => res.json({ sessions: ['A', 'B'].map(key => ({ key, label: 'Desconexiones frecuentes y observación sobre STOP', updatedAt: now, hasActiveRun: false, contextTokens: 200000, totalTokens: 136000 })), ownCount: 2 }));
 app.get('/api/session-settings', (req, res) => res.json({ settings: { modelRef: 'openai/gpt-6-astra', modelProvider: 'openai', model: 'gpt-6-astra', thinkingLevel: 'medium', thinkingLevels: ['low', 'medium', 'high'] } }));
 app.get('/api/history-page', (req, res) => res.json({ sessionId: 'transcript-' + req.query.key, hasMore: false, messages: Array.from({ length: 20 }, (_, i) => ({ id: 'message-' + i, role: i % 2 ? 'assistant' : 'user', text: 'Observación sobre STOP. ' + 'El texto de la conversación debe conservar espacio para leer con comodidad mientras escribes. '.repeat(3), ts: now - 20000 + i * 1000 })) }));
 app.get('/api/run-status', (req, res) => res.json({ hasActiveRun: false }));
 app.get('/api/activity', (req, res) => res.json({ snapshot }));
 app.get('/api/artifacts', (req, res) => res.json({ artifacts: [] }));
+app.get('/api/documents', (req, res) => res.json({ documents: [] }));
+app.get('/api/documents/chat-offers', (req, res) => res.json({ offers: [] }));
 app.get('/api/queue', (req, res) => res.json({ available: true, sessionId: 'transcript-' + req.query.key, queuedCount: 0, items: [], hasMore: false }));
 app.get('/api/usage', (req, res) => res.json({ agentId: 'primary', key: req.query.key, provider: 'openai', model: 'gpt-6-astra', subscription: { status: 'ready', plan: 'Team', credentialType: 'oauth', updatedAt: now, windows: [{ label: '168h', usedPercent: 9, resetAt: now + 86400000 }] }, tokens: { status: 'ready', input: 136000, output: 2000, total: 138000 } }));
 app.get('/api/skill-proposals', (req, res) => res.json({ agent: 'primary', complete: true, proposals: [] }));
@@ -40,6 +42,25 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = 'http://127.0.0.1:' + server.address().port;
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || chromium.executablePath(), headless: true });
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+const headerActions = page => page.evaluate(() => Array.from(document.querySelectorAll('#chat-header button:is(.btn-menu,.rename-session,.header-right > button)'))
+ .filter(node => node.getClientRects().length).map(node => {
+  const r = node.getBoundingClientRect(), y = r.top + r.height / 2;
+  const hit = document.elementFromPoint(r.left + r.width / 2, y);
+  return { id: node.id, height: r.height, width: r.width, left: r.left, right: r.right, y,
+    hits: node.contains(hit) && r.left>=0 && r.right<=innerWidth+1 && r.bottom<=visualViewport.offsetTop+visualViewport.height+1 };
+ }));
+async function equalHeader(page, scene, required = []) {
+ const actions=await headerActions(page);
+ const y=actions.find(a=>a.id==='btn-skill-review')?.y;
+ const order=[...actions].sort((a,b)=>a.left-b.left);
+ const distinct=order.slice(1).every((b,i)=>b.left>=order[i].right-1);
+ const visible=actions.map(a=>a.id);
+ check(scene+' · aligned 44 px buttons with separate hit targets',distinct &&
+  visible.includes('btn-skill-review') && visible.includes('btn-rename-session') && required.every(id=>visible.includes(id)) &&
+  visible.some(id=>id==='hub-documents-entry'||id==='hub-documents-trigger') &&
+  actions.every(a=>a.height===44 && a.width>=44 && a.hits && Math.abs(a.y-y)<=1));
+ if (!distinct||actions.some(a=>a.height!==44||!a.hits||Math.abs(a.y-y)>1)) console.log('HEADER', scene, JSON.stringify(actions));
+}
 function measure() {
  const rect = node => { const r = node.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height }; };
  const nodes = Object.fromEntries(['chat-header', 'messages', 'input', 'btn-send', 'composer', 'session-panels', 'model-summary', 'btn-usage'].map(id => [id, rect(document.getElementById(id))]));
@@ -133,6 +154,56 @@ try {
    if (point.ok) { await page.touchscreen.tap(point.x, point.y); await page.waitForTimeout(80); }
    check('one Stop gesture requests one native abort, never a chat send ' + width, aborts.length === before + 1 && sends.length === 0 && await page.locator('#input').isDisabled() && await page.locator('#btn-send').isDisabled());
    const ids = await page.locator('[id]').evaluateAll(nodes => nodes.map(n => n.id)); check('no duplicate IDs ' + width, new Set(ids).size === ids.length);
+  }
+  await context.close();
+ }
+ if (!baseline) for (const [width,height,touch] of [[320,844,true],[390,844,true],[844,390,true],[1440,900,false]]) {
+  const context=await browser.newContext({viewport:{width,height},isMobile:touch,hasTouch:touch,serviceWorkers:'block',extraHTTPHeaders:{'x-hub-header-fixture':'documents'}});
+  let skillCount=0;
+  await context.route('**/*', route=>{
+   const url=new URL(route.request().url());
+   if(url.origin!==base){external.push(url.href);return route.abort();}
+   if(url.pathname==='/api/skill-proposals'&&route.request().method()==='GET')return route.fulfill({json:{agent:'primary',complete:true,
+    proposals:Array.from({length:skillCount},(_,i)=>({id:'header-'+i,title:'Revisión ficticia '+i,kind:'create',status:'pending',revisionHash:'fixture-'+i}))}});
+   return route.continue();
+  });
+  await context.addInitScript(() => {
+   let size;Object.defineProperty(visualViewport,'height',{configurable:true,get:()=>size??innerHeight});
+   window.testHeaderKeyboard=h=>{size=h;visualViewport.dispatchEvent(new Event('resize'));};
+  });
+  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(base);
+  await page.waitForFunction(() => typeof state !== 'undefined' && state.current === 'A' && !state.historyLoading && state.ws?.readyState === WebSocket.OPEN);
+  await page.locator('#btn-skill-review[data-count="0"]').waitFor();await page.locator('#hub-documents-entry').waitFor();
+  await page.evaluate(()=>closeNav());
+  if (width<=820) await page.waitForFunction(()=>!document.body.classList.contains('nav-open') && document.getElementById('sidebar').getBoundingClientRect().right<=.5);
+  await settle(page);
+  await equalHeader(page,width+' normal with Skills 0 and Documents',width<=820?['btn-menu']:[]);
+  await page.locator('#chat-header').screenshot({path:path.join(out,width+'-header.png')});
+  if(touch){
+   skillCount=12;await page.evaluate(()=>window.HubSkillReview.refresh());
+   await page.locator('#btn-skill-review[data-count="12"]').waitFor();
+   await page.evaluate(()=>{
+    document.getElementById('btn-pending-questions').classList.remove('hidden');
+    document.querySelector('.pending-questions-label').textContent='2';
+    window.testHeaderKeyboard(300);
+   });await settle(page);
+   check('nonzero Skills count stays legible at '+width,await page.locator('#btn-skill-review .hub-sr-badge').evaluate(e=>e.textContent==='12'&&e.getClientRects().length>0));
+   await equalHeader(page,width+' compact with pending, model and Skills 12',['btn-pending-questions','btn-session-overview']);
+   await page.locator('#chat-header').screenshot({path:path.join(out,width+'-header-compact.png')});
+  }
+  if(width===390){
+   await page.locator('#btn-rename-session').tap();
+   await page.locator('#session-rename-input').waitFor();
+   check('renaming control opens its form without changing the title',await page.locator('#session-rename-input').inputValue()==='Desconexiones frecuentes y observación sobre STOP');
+   await page.locator('#session-rename-form').getByRole('button',{name:'Cancelar'}).tap();
+   await page.locator('#session-rename-form').waitFor({state:'hidden'});
+   await page.locator('#hub-documents-entry').tap();await page.locator('#hub-documents:not([hidden])').waitFor();
+   await page.locator('.hd-back').tap();await page.locator('#hub-documents').waitFor({state:'hidden'});
+   await settle(page);await equalHeader(page,width+' after loading Documents and returning');
+   await page.locator('#btn-skill-review').tap();await page.locator('#skill-review-dialog[open]').waitFor();
+   await page.locator('#skill-review-dialog .hub-sr-close').tap();await page.locator('#skill-review-dialog').waitFor({state:'hidden'});
+   check('Skills and Documents stay separately operable by touch',await page.locator('#hub-documents-trigger').isVisible());
   }
   await context.close();
  }

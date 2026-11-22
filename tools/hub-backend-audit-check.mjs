@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const { WebSocket, WebSocketServer } = require('ws');
+const { strip: visibleText, HEADER_RE } = require('../lib/hub-identity');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const serverFile = path.join(repo, 'server.js');
 const serverHash = crypto.createHash('sha256').update(fs.readFileSync(serverFile)).digest('hex').slice(0, 12);
@@ -108,11 +109,12 @@ gateway.on('connection', socket => {
       case 'sessions.messages.subscribe': return reply({ subscriptionId: 'inert-audit' });
       case 'chat.history': return reply({ messages: [], sessionInfo: { hasActiveRun: activeRunIds.length > 0, activeRunIds } });
       case 'chat.send': {
-        if (params.message === 'inert rejection fixture') return reply(null, { code: 'INVALID_REQUEST', message: 'Fixture rejected the message' });
+        const body = visibleText(params.message);
+        if (body === 'inert rejection fixture') return reply(null, { code: 'INVALID_REQUEST', message: 'Fixture rejected the message' });
         // Emulate the Gateway's durable idempotency contract, without executing anything.
         const id = String(params.idempotencyKey || '');
         if (!admissions.has(id)) admissions.set(id, { runId: 'fixture-run-' + admissions.size, status: 'started' });
-        if (params.message === 'inert delayed disconnect fixture') return setTimeout(() => reply(admissions.get(id)), 100);
+        if (body === 'inert delayed disconnect fixture') return setTimeout(() => reply(admissions.get(id)), 100);
         return reply(admissions.get(id));
       }
       case 'chat.abort': return reply({ ok: true, aborted: true, runIds: [] });
@@ -497,6 +499,8 @@ try {
     assert.equal(acknowledgement.type, 'send_accepted');
     assert.equal(acknowledgement.clientMessageId, message.clientMessageId);
     assert.equal(acknowledgement.requestId, message.requestId);
+    const forwarded = requests.findLast(item => item.method === 'chat.send' && visibleText(item.params.message) === message.text);
+    assert.ok(forwarded && HEADER_RE.test(forwarded.params.message.split(String.fromCharCode(10))[0]));
   });
 
   await check('Gateway send errors preserve both correlation identifiers', async () => {
@@ -590,7 +594,7 @@ try {
     const temporaryBrowser = await connectBrowser();
     temporaryBrowser.socket.send(JSON.stringify({ type: 'send', agentId: 'audit', sessionKey: key,
       text: 'inert delayed disconnect fixture', clientMessageId: 'audit-disconnected', requestId: 'audit-disconnected-attempt' }));
-    await until(() => requests.some(item => item.method === 'chat.send' && item.params.message === 'inert delayed disconnect fixture'), 'delayed fixture admission');
+    await until(() => requests.some(item => item.method === 'chat.send' && visibleText(item.params.message) === 'inert delayed disconnect fixture'), 'delayed fixture admission');
     const closed = once(temporaryBrowser.socket, 'close');
     temporaryBrowser.socket.close();
     await closed;
